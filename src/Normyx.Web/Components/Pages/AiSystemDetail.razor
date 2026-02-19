@@ -27,11 +27,18 @@ else
             <div class="alert-danger">@_error</div>
         }
 
-        @if (_currentVersionId is not null)
+        <div class="tab-row">
+            @foreach (var tab in WorkspaceTabs)
+            {
+                <button type="button" class="@($"tab-chip {(IsTab(tab) ? "active" : string.Empty)}")" @onclick="() => SetTab(tab)">@tab</button>
+            }
+        </div>
+
+        @if (_currentVersionId is not null && IsTab("Overview"))
         {
             <div class="grid-cards" style="margin-bottom: 1rem;">
                 <section class="metric-card">
-                    <h3>Assessments</h3>
+                    <h3>Regulatory Assessments</h3>
                     <p>@_assessments.Count</p>
                 </section>
                 <section class="metric-card">
@@ -39,7 +46,7 @@ else
                     <p>@_findings.Count</p>
                 </section>
                 <section class="metric-card">
-                    <h3>Actions</h3>
+                    <h3>Outstanding Compliance Obligations</h3>
                     <p>@_actions.Count</p>
                 </section>
                 <section class="metric-card">
@@ -49,63 +56,64 @@ else
             </div>
 
             <div class="btn-row">
-                <button class="btn-main" @onclick="RunAssessmentAsync">Run Assessment</button>
-                <button class="btn-main secondary" @onclick="GenerateExportAsync">Generate Export</button>
+                <button class="btn-main" @onclick="RunAssessmentAsync">Execute Regulatory Assessment</button>
+                <button class="btn-main secondary" @onclick="GenerateExportAsync">Generate Regulator Export</button>
             </div>
 
             @if (_lastRun is not null)
             {
-                <p>Latest run: class=@_lastRun.AiActRiskClass, score=@_lastRun.ComplianceScore, findings=@_lastRun.FindingsCount, actions=@_lastRun.ActionsCount</p>
+                <p>Latest execution: class=@_lastRun.AiActRiskClass, score=@_lastRun.ComplianceScore, findings=@_lastRun.FindingsCount, actions=@_lastRun.ActionsCount</p>
             }
-        }
 
-        <h2>Versions</h2>
-        <ul>
-            @foreach (var version in _versions)
-            {
-                <li>
-                    v@version.VersionNumber - @version.ChangeSummary
-                    <button class="btn-small" @onclick="() => SelectVersionAsync(version.Id)">Use</button>
-                </li>
-            }
-        </ul>
+            <h2>System Versions</h2>
+            <ul>
+                @foreach (var version in _versions)
+                {
+                    <li>
+                        v@version.VersionNumber - @version.ChangeSummary
+                        <button class="btn-small" @onclick="() => SelectVersionAsync(version.Id)">Activate Version</button>
+                    </li>
+                }
+            </ul>
 
-        @if (_currentVersionId is not null)
-        {
             <h3>Compliance Diff</h3>
             <div class="field-grid">
                 <InputSelect @bind-Value="_compareVersionId" class="text-input">
-                    <option value="">Select version</option>
-                    @foreach (var version in _versions.Where(x => x.Id != _currentVersionId.Value))
+                    <option value="">Select comparison version</option>
+                    @foreach (var version in GetComparisonVersions())
                     {
                         <option value="@version.Id">v@version.VersionNumber</option>
                     }
                 </InputSelect>
-                <button class="btn-small" @onclick="RunDiffAsync">Compare</button>
+                <button class="btn-small" @onclick="RunDiffAsync">Compare Versions</button>
             </div>
             @if (_diff is not null)
             {
-                <p>Diff delta: @_diff.ScoreDelta, AI Act class changed: @_diff.AiActClassChanged</p>
+                <p>Risk delta: @_diff.ScoreDelta, AI Act class changed: @_diff.AiActClassChanged</p>
             }
 
-            <h2>Questionnaire</h2>
+            <h2>Regulatory Questionnaire</h2>
             <EditForm FormName="system-questionnaire-form" Model="_questionnaire" OnValidSubmit="SaveQuestionnaireAsync">
                 <div class="field-grid">
                     <InputText @bind-Value="_questionnaire.AutomatedDecisionMaking" class="text-input" placeholder="automatedDecisionMaking true/false" />
                     <InputText @bind-Value="_questionnaire.CriticalSector" class="text-input" placeholder="criticalSector true/false" />
                 </div>
-                <button class="btn-small" type="submit">Save questionnaire</button>
+                <button class="btn-small" type="submit">Store Questionnaire Response</button>
             </EditForm>
+        }
 
-            <h2>Architecture Components (@_architecture.Components.Count)</h2>
+        @if (_currentVersionId is not null && IsTab("Architecture"))
+        {
+            <h2>Architecture Graph Workspace</h2>
+            <p class="muted">Trust-zone aware component model with flow registry.</p>
+            <h3>Components (@_architecture.Components.Count)</h3>
             <ul>
                 @foreach (var component in _architecture.Components)
                 {
-                    <li>@component.Name (@component.Type) - @component.TrustZone - @component.DataSensitivityLevel</li>
+                    <li>@component.Name (@component.Type) | Zone: @component.TrustZone | Sensitivity: @component.DataSensitivityLevel</li>
                 }
             </ul>
 
-            <h3>Add component</h3>
             <EditForm FormName="system-add-component-form" Model="_newComponent" OnValidSubmit="AddComponentAsync">
                 <div class="field-grid">
                     <InputText @bind-Value="_newComponent.Name" class="text-input" placeholder="Component name" />
@@ -113,10 +121,10 @@ else
                     <InputText @bind-Value="_newComponent.TrustZone" class="text-input" placeholder="Trust zone" />
                     <InputText @bind-Value="_newComponent.DataSensitivityLevel" class="text-input" placeholder="Sensitivity" />
                 </div>
-                <button class="btn-small" type="submit">Add component</button>
+                <button class="btn-small" type="submit">Register Component</button>
             </EditForm>
 
-            <h2>Data Flows (@_architecture.Flows.Count)</h2>
+            <h3>Data Flows (@_architecture.Flows.Count)</h3>
             <ul>
                 @foreach (var flow in _architecture.Flows)
                 {
@@ -124,7 +132,6 @@ else
                 }
             </ul>
 
-            <h3>Add flow</h3>
             <EditForm FormName="system-add-flow-form" Model="_newFlow" OnValidSubmit="AddFlowAsync">
                 <div class="field-grid">
                     <InputSelect @bind-Value="_newFlow.FromComponentId" class="text-input">
@@ -145,10 +152,10 @@ else
                     <InputText @bind-Value="_newFlow.Purpose" class="text-input" placeholder="Purpose" />
                 </div>
                 <label><InputCheckbox @bind-Value="_newFlow.EncryptionInTransit" /> Encryption in transit</label>
-                <button class="btn-small" type="submit">Add flow</button>
+                <button class="btn-small" type="submit">Register Data Flow</button>
             </EditForm>
 
-            <h2>Data Stores (@_architecture.Stores.Count)</h2>
+            <h3>Data Stores (@_architecture.Stores.Count)</h3>
             <ul>
                 @foreach (var store in _architecture.Stores)
                 {
@@ -156,7 +163,6 @@ else
                 }
             </ul>
 
-            <h3>Add data store</h3>
             <EditForm FormName="system-add-store-form" Model="_newStore" OnValidSubmit="AddStoreAsync">
                 <div class="field-grid">
                     <InputSelect @bind-Value="_newStore.ComponentId" class="text-input">
@@ -172,10 +178,13 @@ else
                     <InputText @bind-Value="_newStore.AccessModel" class="text-input" placeholder="Access model" />
                 </div>
                 <label><InputCheckbox @bind-Value="_newStore.EncryptionAtRest" /> Encryption at rest</label>
-                <button class="btn-small" type="submit">Add data store</button>
+                <button class="btn-small" type="submit">Register Data Store</button>
             </EditForm>
+        }
 
-            <h2>Data & Vendors</h2>
+        @if (_currentVersionId is not null && IsTab("Data & Vendors"))
+        {
+            <h2>Data Inventory and Supplier Registry</h2>
             <p>Data items: @_inventory.DataItems.Count | Vendors: @_inventory.Vendors.Count</p>
 
             <ul>
@@ -185,7 +194,6 @@ else
                 }
             </ul>
 
-            <h3>Add data inventory item</h3>
             <EditForm FormName="system-add-data-item-form" Model="_newDataItem" OnValidSubmit="AddDataItemAsync">
                 <div class="field-grid">
                     <InputText @bind-Value="_newDataItem.DataCategory" class="text-input" placeholder="Data category" />
@@ -196,7 +204,7 @@ else
                 <label><InputCheckbox @bind-Value="_newDataItem.ContainsPersonalData" /> Contains personal data</label>
                 <label><InputCheckbox @bind-Value="_newDataItem.SpecialCategory" /> Special category data</label>
                 <label><InputCheckbox @bind-Value="_newDataItem.TransferOutsideEu" /> Transfer outside EU</label>
-                <button class="btn-small" type="submit">Add data item</button>
+                <button class="btn-small" type="submit">Register Data Inventory Item</button>
             </EditForm>
 
             <ul>
@@ -206,7 +214,6 @@ else
                 }
             </ul>
 
-            <h3>Add vendor</h3>
             <EditForm FormName="system-add-vendor-form" Model="_newVendor" OnValidSubmit="AddVendorAsync">
                 <div class="field-grid">
                     <InputText @bind-Value="_newVendor.Name" class="text-input" placeholder="Vendor name" />
@@ -215,10 +222,130 @@ else
                     <InputText @bind-Value="_newVendor.SubProcessorsCsv" class="text-input" placeholder="sub-processor-a, sub-processor-b" />
                 </div>
                 <label><InputCheckbox @bind-Value="_newVendor.DpaInPlace" /> DPA in place</label>
-                <button class="btn-small" type="submit">Add vendor</button>
+                <button class="btn-small" type="submit">Register Supplier</button>
             </EditForm>
+        }
 
-            <h2>Evidence</h2>
+        @if (_currentVersionId is not null && IsTab("Risk Analysis"))
+        {
+            <h2>Risk Matrix View</h2>
+            <p class="muted">Component vs regulatory risk domains.</p>
+            <div class="heatmap">
+                @foreach (var index in Enumerable.Range(1, 20))
+                {
+                    <div class="heat-cell @GetRiskCellClass(index)"></div>
+                }
+            </div>
+
+            <h3>Assessment Runs</h3>
+            <ul>
+                @foreach (var assessment in _assessments)
+                {
+                    <li>@assessment.RanAt.ToString("u") - @assessment.RiskScoresJson</li>
+                }
+            </ul>
+        }
+
+        @if (_currentVersionId is not null && IsTab("Findings"))
+        {
+            <h2>Regulatory Findings (@_findings.Count)</h2>
+            <ul>
+                @foreach (var finding in _findings)
+                {
+                    <li>[ @finding.Severity ] @finding.Title</li>
+                }
+            </ul>
+        }
+
+        @if (_currentVersionId is not null && IsTab("Controls"))
+        {
+            <h2>Control Coverage & Evidence Gaps</h2>
+            <ul>
+                @foreach (var gap in _evidenceGaps.ControlGaps)
+                {
+                    <li>Control gap: @gap.Title (required evidence: @gap.SuggestedEvidence)</li>
+                }
+            </ul>
+            <ul>
+                @foreach (var gap in _evidenceGaps.ActionGaps)
+                {
+                    <li>Action gap: @gap.Title (required evidence: @gap.SuggestedEvidence)</li>
+                }
+            </ul>
+        }
+
+        @if (_currentVersionId is not null && IsTab("Actions"))
+        {
+            <h2>Compliance Obligation Board</h2>
+            <div class="kanban-board">
+                <div class="kanban-col">
+                    <h4>Critical / New</h4>
+                    @foreach (var action in _actionBoard.New)
+                    {
+                        <article class="kanban-card" data-priority="@action.Priority">
+                            <strong>@action.Title</strong>
+                            <span>@action.Priority / @action.OwnerRole</span>
+                            <div class="btn-row">
+                                <button class="btn-small" @onclick="() => UpdateActionStatusAsync(action.Id, 1)">Move to In Progress</button>
+                            </div>
+                        </article>
+                    }
+                </div>
+
+                <div class="kanban-col">
+                    <h4>In Progress</h4>
+                    @foreach (var action in _actionBoard.InProgress)
+                    {
+                        <article class="kanban-card" data-priority="@action.Priority">
+                            <strong>@action.Title</strong>
+                            <span>@action.Priority / @action.OwnerRole</span>
+                            <div class="btn-row">
+                                <button class="btn-small" @onclick="() => UpdateActionStatusAsync(action.Id, 2)">Mark Complete</button>
+                                <button class="btn-small" @onclick="() => ReviewActionAsync(action.Id, 1)">Approve & Sign Off</button>
+                                <button class="btn-small" @onclick="() => ReviewActionAsync(action.Id, 2)">Accept Risk</button>
+                                <button class="btn-small" @onclick="() => ReviewActionAsync(action.Id, 0)">Escalate to CISO</button>
+                            </div>
+                        </article>
+                    }
+                </div>
+
+                <div class="kanban-col">
+                    <h4>Completed</h4>
+                    @foreach (var action in _actionBoard.Done)
+                    {
+                        <article class="kanban-card" data-priority="@action.Priority">
+                            <strong>@action.Title</strong>
+                            <span>Approved: @action.ApprovedAt?.ToString("u")</span>
+                        </article>
+                    }
+                </div>
+
+                <div class="kanban-col">
+                    <h4>Accepted Risk</h4>
+                    @foreach (var action in _actionBoard.AcceptedRisk)
+                    {
+                        <article class="kanban-card" data-priority="@action.Priority">
+                            <strong>@action.Title</strong>
+                        </article>
+                    }
+                </div>
+            </div>
+
+            @if (_recentReviews.Count > 0)
+            {
+                <h3>Sign-off Timeline</h3>
+                <ul>
+                    @foreach (var review in _recentReviews.Take(10))
+                    {
+                        <li>@review.ReviewedAt.ToString("u") - @review.Decision - @review.Comment</li>
+                    }
+                </ul>
+            }
+        }
+
+        @if (_currentVersionId is not null && IsTab("Evidence"))
+        {
+            <h2>Evidence Locker</h2>
             <InputFile OnChange="UploadDocumentAsync" />
             @if (!string.IsNullOrWhiteSpace(_uploadMessage))
             {
@@ -261,7 +388,7 @@ else
                 }
             </ul>
 
-            <h3>Link evidence</h3>
+            <h3>Link Evidence</h3>
             <EditForm FormName="system-link-evidence-form" Model="_linkEvidence" OnValidSubmit="LinkEvidenceAsync">
                 <div class="field-grid">
                     <InputSelect @bind-Value="_linkEvidence.EvidenceExcerptId" class="text-input">
@@ -293,25 +420,13 @@ else
                         }
                     </InputSelect>
                 </div>
-                <button class="btn-small" type="submit">Create evidence link</button>
+                <button class="btn-small" type="submit">Link Evidence</button>
             </EditForm>
 
-            <h3>Evidence Gaps</h3>
-            <ul>
-                @foreach (var gap in _evidenceGaps.ActionGaps)
-                {
-                    <li>Action gap: @gap.Title (need: @gap.SuggestedEvidence)</li>
-                }
-                @foreach (var gap in _evidenceGaps.ControlGaps)
-                {
-                    <li>Control gap: @gap.Title (need: @gap.SuggestedEvidence)</li>
-                }
-            </ul>
-
-            <h3>Evidence Search (RAG)</h3>
+            <h3>Evidence Search</h3>
             <div class="field-grid">
                 <InputText @bind-Value="_evidenceQuery" class="text-input" placeholder="Search evidence..." />
-                <button class="btn-small" @onclick="SearchEvidenceAsync">Search</button>
+                <button class="btn-small" @onclick="SearchEvidenceAsync">Run Search</button>
             </div>
             <ul>
                 @foreach (var hit in _evidenceHits)
@@ -319,100 +434,42 @@ else
                     <li>[@hit.SourceType] score=@hit.Score.ToString("0.00") - @hit.ChunkText</li>
                 }
             </ul>
+        }
 
-            <h2>Assessments</h2>
-            <ul>
-                @foreach (var assessment in _assessments)
-                {
-                    <li>@assessment.RanAt.ToString("u") - @assessment.RiskScoresJson</li>
-                }
-            </ul>
-
-            <h2>Findings (@_findings.Count)</h2>
-            <ul>
-                @foreach (var finding in _findings)
-                {
-                    <li>[ @finding.Severity ] @finding.Title</li>
-                }
-            </ul>
-
-            <h2>Actions Board</h2>
-            <div class="kanban-board">
-                <div class="kanban-col">
-                    <h4>New</h4>
-                    @foreach (var action in _actionBoard.New)
-                    {
-                        <article class="kanban-card">
-                            <strong>@action.Title</strong>
-                            <span>@action.Priority / @action.OwnerRole</span>
-                            <div class="btn-row">
-                                <button class="btn-small" @onclick="() => UpdateActionStatusAsync(action.Id, 1)">Start</button>
-                            </div>
-                        </article>
-                    }
-                </div>
-
-                <div class="kanban-col">
-                    <h4>In Progress</h4>
-                    @foreach (var action in _actionBoard.InProgress)
-                    {
-                        <article class="kanban-card">
-                            <strong>@action.Title</strong>
-                            <span>@action.Priority / @action.OwnerRole</span>
-                            <div class="btn-row">
-                                <button class="btn-small" @onclick="() => UpdateActionStatusAsync(action.Id, 2)">Done</button>
-                                <button class="btn-small" @onclick="() => ReviewActionAsync(action.Id, 1)">Approve</button>
-                                <button class="btn-small" @onclick="() => ReviewActionAsync(action.Id, 0)">Needs edits</button>
-                                <button class="btn-small" @onclick="() => ReviewActionAsync(action.Id, 2)">Reject</button>
-                            </div>
-                        </article>
-                    }
-                </div>
-
-                <div class="kanban-col">
-                    <h4>Done</h4>
-                    @foreach (var action in _actionBoard.Done)
-                    {
-                        <article class="kanban-card">
-                            <strong>@action.Title</strong>
-                            <span>Approved: @action.ApprovedAt?.ToString("u")</span>
-                        </article>
-                    }
-                </div>
-
-                <div class="kanban-col">
-                    <h4>Accepted Risk</h4>
-                    @foreach (var action in _actionBoard.AcceptedRisk)
-                    {
-                        <article class="kanban-card">
-                            <strong>@action.Title</strong>
-                        </article>
-                    }
-                </div>
-            </div>
+        @if (_currentVersionId is not null && IsTab("Audit Trail"))
+        {
+            <h2>Audit Trail</h2>
+            <p>Immutable event stream for regulatory review.</p>
+            <p>Open dedicated log: <a href="/audit-log">Audit Records</a></p>
 
             @if (_recentReviews.Count > 0)
             {
-                <h3>Recent Reviews</h3>
+                <h3>Recent Signed Events</h3>
                 <ul>
-                    @foreach (var review in _recentReviews.Take(10))
+                    @foreach (var review in _recentReviews.Take(12))
                     {
-                        <li>@review.ReviewedAt.ToString("u") - @review.Decision - @review.Comment</li>
+                        <li>@review.ReviewedAt.ToString("u") | @review.Decision | hash-ref: @review.Id.ToString()[..8]</li>
                     }
                 </ul>
             }
+        }
 
-            <h2>Exports</h2>
+        @if (_currentVersionId is not null && IsTab("Reports"))
+        {
+            <h2>Regulatory Reporting</h2>
             <div class="field-grid">
                 <InputSelect @bind-Value="_exportForm.Format" class="text-input">
                     <option value="pdf">PDF</option>
                     <option value="json">JSON</option>
                 </InputSelect>
-                <InputText @bind-Value="_exportForm.ExportType" class="text-input" placeholder="DPIA_Draft" />
+                <InputText @bind-Value="_exportForm.ExportType" class="text-input" placeholder="Regulator_Export" />
             </div>
-            <label><InputCheckbox @bind-Value="_exportForm.SendWebhook" /> Send to enabled webhooks</label>
+            <label><InputCheckbox @bind-Value="_exportForm.SendWebhook" /> Dispatch via enabled integrations</label>
+            <div class="btn-row">
+                <button class="btn-main secondary" @onclick="GenerateExportAsync">Generate Regulator Export</button>
+            </div>
 
-            <h3>Generated Exports</h3>
+            <h3>Generated Report Artifacts</h3>
             <ul>
                 @foreach (var item in _exports)
                 {
@@ -462,6 +519,21 @@ else
     private readonly LinkEvidenceForm _linkEvidence = new();
     private readonly ExportForm _exportForm = new();
     private string _evidenceQuery = "DPIA lawful basis transfer";
+    private string _activeTab = "Overview";
+
+    private static readonly string[] WorkspaceTabs =
+    [
+        "Overview",
+        "Architecture",
+        "Data & Vendors",
+        "Risk Analysis",
+        "Findings",
+        "Controls",
+        "Actions",
+        "Evidence",
+        "Audit Trail",
+        "Reports"
+    ];
 
     protected override async Task OnParametersSetAsync()
     {
@@ -951,6 +1023,44 @@ else
 
     private string ResolveComponentName(Guid componentId)
         => _architecture.Components.FirstOrDefault(c => c.Id == componentId)?.Name ?? componentId.ToString()[..8];
+
+    private IEnumerable<Normyx.Web.Models.VersionSummaryDto> GetComparisonVersions()
+    {
+        if (_currentVersionId is null)
+        {
+            return Enumerable.Empty<Normyx.Web.Models.VersionSummaryDto>();
+        }
+
+        var currentVersionId = _currentVersionId.Value;
+        return _versions.Where(x => x.Id != currentVersionId);
+    }
+
+    private bool IsTab(string tab)
+        => string.Equals(_activeTab, tab, StringComparison.Ordinal);
+
+    private void SetTab(string tab)
+    {
+        if (!WorkspaceTabs.Contains(tab, StringComparer.Ordinal))
+        {
+            return;
+        }
+
+        _activeTab = tab;
+    }
+
+    private string GetRiskCellClass(int index)
+    {
+        var evidencePenalty = Math.Min(_evidenceGaps.TotalGaps / 2, 3);
+        var assessmentPenalty = Math.Min(_findings.Count / 3, 3);
+        var score = (index + evidencePenalty + assessmentPenalty) % 4;
+        return score switch
+        {
+            0 => "low",
+            1 => "medium",
+            2 => "high",
+            _ => "critical"
+        };
+    }
 
     private void EnsureEvidenceLinkDefaults()
     {
