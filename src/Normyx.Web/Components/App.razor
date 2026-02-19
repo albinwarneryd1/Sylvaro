@@ -10,12 +10,27 @@
     <link rel="stylesheet" href="@Assets["Normyx.Web.styles.css"]" />
     <ImportMap />
     <link rel="icon" type="image/png" href="favicon.png" />
-    <HeadOutlet @rendermode="InteractiveServer" />
+    <HeadOutlet @rendermode="PageRenderMode" />
 </head>
 
 <body>
-    <Routes @rendermode="InteractiveServer" />
+    <ErrorBoundary>
+        <ChildContent>
+            <Routes @rendermode="PageRenderMode" />
+        </ChildContent>
+        <ErrorContent>
+            <div class="card-shell">
+                <h2>Workspace temporarily unavailable</h2>
+                <p>An unexpected rendering fault was captured. Reload to recover the interactive session.</p>
+                <a class="btn-main" href=".">Reload Workspace</a>
+            </div>
+        </ErrorContent>
+    </ErrorBoundary>
     <script src="_framework/blazor.web.js"></script>
 </body>
 
 </html>
+
+@code {
+    private static readonly InteractiveServerRenderMode PageRenderMode = new(prerender: false);
+}

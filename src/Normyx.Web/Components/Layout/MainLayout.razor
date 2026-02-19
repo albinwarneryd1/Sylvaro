@@ -1,7 +1,6 @@
 @inherits LayoutComponentBase
 @inject Normyx.Web.Services.AuthSession Session
 @inject IJSRuntime JsRuntime
-@inject NavigationManager Nav
 @implements IDisposable
 
 <div class="app-shell">
@@ -30,7 +29,14 @@
         </header>
 
         <article class="content-panel">
-            @Body
+            @if (!Session.IsInitialized)
+            {
+                <div class="card-shell"><p>Restoring secure session...</p></div>
+            }
+            else
+            {
+                @Body
+            }
         </article>
 
         <footer class="platform-footer">
@@ -62,13 +68,7 @@
         }
 
         _didInitialSessionRestore = true;
-        var wasAuthenticated = Session.IsAuthenticated;
         await Session.EnsureInitializedAsync(JsRuntime);
-
-        if (!wasAuthenticated && Session.IsAuthenticated)
-        {
-            Nav.NavigateTo(Nav.Uri, replace: true);
-        }
     }
 
     private void OnSessionChanged() => InvokeAsync(StateHasChanged);
