@@ -290,21 +290,70 @@ else
         @if (_currentVersionId is not null && IsTab("Risk Analysis"))
         {
             <h2>Risk Matrix View</h2>
-            <p class="muted">Component vs regulatory risk domains.</p>
-            <div class="heatmap">
-                @foreach (var index in Enumerable.Range(1, 20))
+            <p class="muted">Component-by-domain matrix with perspective toggles and analytical drill-down.</p>
+
+            <div class="btn-row">
+                @foreach (var perspective in RiskPerspectives)
                 {
-                    <div class="heat-cell @GetRiskCellClass(index)"></div>
+                    <button class="btn-small" @onclick="() => SetRiskPerspective(perspective)">
+                        @perspective @if (_riskPerspective == perspective)
+                        {
+                            <text>(active)</text>
+                        }
+                    </button>
                 }
             </div>
 
-            <h3>Assessment Runs</h3>
-            <ul>
-                @foreach (var assessment in _assessments)
-                {
-                    <li>@assessment.RanAt.ToString("u") - @assessment.RiskScoresJson</li>
-                }
-            </ul>
+            <div class="card-shell" style="margin-bottom:0.75rem;">
+                <h3>Severity Legend</h3>
+                <div class="status-line">
+                    <span class="risk-pill danger" title="Immediate regulatory/control deficiency">Critical</span>
+                    <span class="risk-pill danger" title="High-priority remediation required">High</span>
+                    <span class="risk-pill warning" title="Monitor and plan control uplift">Medium</span>
+                    <span class="risk-pill info" title="Low exposure with baseline controls">Low</span>
+                    <span class="risk-pill success" title="Controls currently sufficient">Compliant</span>
+                </div>
+            </div>
+
+            <table class="table-shell">
+                <thead>
+                    <tr>
+                        <th>Component</th>
+                        @foreach (var axis in GetRiskAxes())
+                        {
+                            <th>@axis</th>
+                        }
+                    </tr>
+                </thead>
+                <tbody>
+                    @foreach (var row in GetRiskMatrixRows())
+                    {
+                        <tr>
+                            <td>
+                                <button class="btn-small" @onclick="() => SelectRiskComponent(row.ComponentId)">@row.ComponentName</button>
+                            </td>
+                            @foreach (var severity in row.Severities)
+                            {
+                                <td><span class="@($"risk-pill {ToRiskPillClass(severity)}")" title="@GetRiskTooltip(row.ComponentName, severity)">@severity</span></td>
+                            }
+                        </tr>
+                    }
+                </tbody>
+            </table>
+
+            @if (GetSelectedRiskMatrixRow() is { } selectedRiskRow)
+            {
+                <div class="card-shell" style="margin-top:0.75rem;">
+                    <h3>Risk Justification Panel</h3>
+                    <p><strong>@selectedRiskRow.ComponentName</strong> is evaluated in <strong>@_riskPerspective</strong> mode.</p>
+                    <ul>
+                        @foreach (var note in GetRiskJustifications(selectedRiskRow))
+                        {
+                            <li>@note</li>
+                        }
+                    </ul>
+                </div>
+            }
         }
 
         @if (_currentVersionId is not null && IsTab("Findings"))
@@ -635,8 +684,10 @@ else
     private string _evidenceQuery = "DPIA lawful basis transfer";
     private string _activeTab = "Overview";
     private Guid? _selectedComponentId;
+    private Guid? _selectedRiskComponentId;
     private bool _showPersonalDataOnly;
     private bool _showHighRiskFlowsOnly;
+    private string _riskPerspective = "Regulatory";
 
     private static readonly string[] WorkspaceTabs =
     [
@@ -650,6 +701,13 @@ else
         "Evidence",
         "Audit Trail",
         "Reports"
+    ];
+
+    private static readonly string[] RiskPerspectives =
+    [
+        "Regulatory",
+        "Security",
+        "Data Privacy"
     ];
 
     protected override async Task OnParametersSetAsync()
@@ -701,6 +759,10 @@ else
         if (_selectedComponentId is null || !_architecture.Components.Any(x => x.Id == _selectedComponentId.Value))
         {
             _selectedComponentId = _architecture.Components.FirstOrDefault()?.Id;
+        }
+        if (_selectedRiskComponentId is null || !_architecture.Components.Any(x => x.Id == _selectedRiskComponentId.Value))
+        {
+            _selectedRiskComponentId = _architecture.Components.FirstOrDefault()?.Id;
         }
 
         _inventory = await Api.GetAsync<Normyx.Web.Models.InventoryResponse>($"/versions/{versionId}/inventory") ?? new([], []);
@@ -1161,6 +1223,83 @@ else
         _activeTab = tab;
     }
 
+    private void SetRiskPerspective(string perspective)
+    {
+        if (!RiskPerspectives.Contains(perspective, StringComparer.Ordinal))
+        {
+            return;
+        }
+
+        _riskPerspective = perspective;
+    }
+
+    private IEnumerable<string> GetRiskAxes()
+        => _riskPerspective switch
+        {
+            "Security" => ["Access Control", "Monitoring", "Incident Response"],
+            "Data Privacy" => ["Personal Data", "International Transfers", "Retention"],
+            _ => ["AI Act", "GDPR", "NIS2"]
+        };
+
+    private IEnumerable<RiskMatrixRow> GetRiskMatrixRows()
+        => _architecture.Components
+            .OrderBy(x => x.Name)
+            .Take(12)
+            .Select(component => new RiskMatrixRow(
+                component.Id,
+                component.Name,
+                GetRiskAxes().Select(axis => EvaluateRiskSeverity(component, axis)).ToArray()));
+
+    private void SelectRiskComponent(Guid componentId)
+        => _selectedRiskComponentId = componentId;
+
+    private RiskMatrixRow? GetSelectedRiskMatrixRow()
+        => GetRiskMatrixRows().FirstOrDefault(x => x.ComponentId == _selectedRiskComponentId);
+
+    private string EvaluateRiskSeverity(Normyx.Web.Models.ComponentDto component, string axis)
+    {
+        var hasPersonalFlow = _architecture.Flows.Any(flow =>
+            (flow.FromComponentId == component.Id || flow.ToComponentId == component.Id) &&
+            flow.DataCategories.Any(category => category.Contains("personal", StringComparison.OrdinalIgnoreCase)));
+
+        var hasExternalVendor = component.IsExternal || _inventory.Vendors.Any(vendor =>
+            component.Name.Contains(vendor.Name, StringComparison.OrdinalIgnoreCase));
+
+        return axis switch
+        {
+            "AI Act" => component.Type.Contains("llm", StringComparison.OrdinalIgnoreCase) ? "High" : "Medium",
+            "GDPR" => hasPersonalFlow || component.DataSensitivityLevel.Contains("high", StringComparison.OrdinalIgnoreCase) ? "High" : "Low",
+            "NIS2" => component.TrustZone.Contains("external", StringComparison.OrdinalIgnoreCase) ? "High" : "Medium",
+            "Access Control" => component.IsExternal ? "High" : "Medium",
+            "Monitoring" => component.Type.Contains("logging", StringComparison.OrdinalIgnoreCase) ? "Compliant" : "Medium",
+            "Incident Response" => component.TrustZone.Contains("external", StringComparison.OrdinalIgnoreCase) ? "High" : "Medium",
+            "Personal Data" => hasPersonalFlow ? "High" : "Low",
+            "International Transfers" => _inventory.DataItems.Any(x => x.TransferOutsideEu) || hasExternalVendor ? "High" : "Low",
+            "Retention" => _architecture.Stores.Any(store => store.ComponentId == component.Id && store.RetentionDays > 3650) ? "Medium" : "Compliant",
+            _ => "Low"
+        };
+    }
+
+    private static string ToRiskPillClass(string severity)
+        => severity switch
+        {
+            "Critical" => "danger",
+            "High" => "danger",
+            "Medium" => "warning",
+            "Compliant" => "success",
+            _ => "info"
+        };
+
+    private string GetRiskTooltip(string componentName, string severity)
+        => $"{componentName} is currently evaluated as {severity} under {_riskPerspective} perspective.";
+
+    private IEnumerable<string> GetRiskJustifications(RiskMatrixRow row)
+    {
+        yield return "Triggered policy references: AI_ACT.CLASSIFICATION, GDPR.DPIA.TRIGGER, NIS2.BASELINE.CONTROLS.";
+        yield return "Risk reflects current architecture sensitivity, transfer patterns, and external trust boundaries.";
+        yield return $"Evidence gaps currently open: {_evidenceGaps.TotalGaps}. Add evidence links to reduce exposure.";
+    }
+
     private string GetRiskCellClass(int index)
     {
         var evidencePenalty = Math.Min(_evidenceGaps.TotalGaps / 2, 3);
@@ -1342,6 +1481,8 @@ else
         public string Format { get; set; } = "pdf";
         public bool SendWebhook { get; set; }
     }
+
+    private sealed record RiskMatrixRow(Guid ComponentId, string ComponentName, IReadOnlyList<string> Severities);
 
     private sealed class NewComponentForm
     {
