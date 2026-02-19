@@ -298,11 +298,11 @@ else
             var distribution = _dashboard?.RiskDistribution ?? new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
             var buckets = new List<RiskLegendBucket>
             {
-                new("Critical", "critical", CountKeys(distribution, "critical", "prohibited"), "#7A2F2F"),
-                new("High", "high", CountKeys(distribution, "high"), "#9A4437"),
-                new("Medium", "medium", CountKeys(distribution, "limited", "medium"), "#8B6533"),
-                new("Low", "low", CountKeys(distribution, "minimal", "low"), "#6F5C47"),
-                new("Compliant", "compliant", Math.Max(0, _actions.Count(a => a.Status.Equals("Done", StringComparison.OrdinalIgnoreCase))), "#4F6842")
+                new("Critical", "critical", CountKeys(distribution, "critical", "prohibited"), "#8C2F2A"),
+                new("High", "high", CountKeys(distribution, "high"), "#B14A3B"),
+                new("Medium", "medium", CountKeys(distribution, "limited", "medium"), "#C58B2D"),
+                new("Low", "low", CountKeys(distribution, "minimal", "low"), "#3F6FA6"),
+                new("Compliant", "compliant", Math.Max(0, _actions.Count(a => a.Status.Equals("Done", StringComparison.OrdinalIgnoreCase))), "#2E6B4F")
             };
 
             var total = Math.Max(1, buckets.Sum(x => x.Count));

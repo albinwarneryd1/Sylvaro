@@ -43,19 +43,19 @@
     --border-strong: #c4bcaf;
     --border-accent: #6b4326;
 
-    --severity-critical: #7a2f2f;
-    --severity-high: #9a4437;
-    --severity-medium: #8b6533;
+    --severity-critical: #8c2f2a;
+    --severity-high: #b14a3b;
+    --severity-medium: #c58b2d;
     --severity-low: #3f6fa6;
-    --severity-info: #595047;
-    --severity-compliant: #4f6842;
+    --severity-info: #5b534a;
+    --severity-compliant: #2e6b4f;
 
-    --severity-critical-bg: #f8e9e7;
-    --severity-high-bg: #f3e4de;
-    --severity-medium-bg: #f2e7d8;
-    --severity-low-bg: #ebe5db;
-    --severity-info-bg: #ece7df;
-    --severity-compliant-bg: #e5eee0;
+    --severity-critical-bg: #f6e7e4;
+    --severity-high-bg: #f8ece8;
+    --severity-medium-bg: #f6efdf;
+    --severity-low-bg: #e9eef6;
+    --severity-info-bg: #eee9e2;
+    --severity-compliant-bg: #e4efe8;
 
     --space-1: 0.25rem;
     --space-2: 0.5rem;
@@ -637,11 +637,11 @@ input.text-input {
 
 .donut-chart {
     --donut-gradient: conic-gradient(
-        #7a2f2f 0 12%,
-        #9a4437 12% 42%,
-        #8b6533 42% 80%,
-        #6f5c47 80% 95%,
-        #4f6842 95% 100%
+        #8c2f2a 0 12%,
+        #b14a3b 12% 42%,
+        #c58b2d 42% 80%,
+        #3f6fa6 80% 95%,
+        #2e6b4f 95% 100%
     );
     width: 148px;
     height: 148px;
