@@ -35,6 +35,8 @@ public record ExportArtifactDto(Guid Id, string ExportType, string? MimeType, Da
 public record ExportListItemDto(Guid Id, string ExportType, string MimeType, DateTimeOffset CreatedAt, Guid CreatedByUserId);
 
 public record DocumentUploadResponse(Guid Id, string FileName, DateTimeOffset UploadedAt);
+public record DocumentListItemDto(Guid Id, string FileName, string MimeType, DateTimeOffset UploadedAt, Guid UploadedByUserId, string[] Tags, int ExcerptCount);
+public record EvidenceExcerptDto(Guid Id, Guid DocumentId, string Title, string Text, string PageRef, Guid CreatedByUserId, DateTimeOffset CreatedAt);
 
 public record ArchitectureResponse(List<ComponentDto> Components, List<DataFlowDto> Flows, List<DataStoreDto> Stores);
 public record ComponentDto(Guid Id, Guid AiSystemVersionId, string Name, string Type, string Description, string TrustZone, bool IsExternal, string DataSensitivityLevel);

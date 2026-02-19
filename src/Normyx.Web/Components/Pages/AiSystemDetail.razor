@@ -185,6 +185,77 @@ else
                 <p>@_uploadMessage</p>
             }
 
+            <p>Documents: @_documents.Count</p>
+            <ul>
+                @foreach (var doc in _documents)
+                {
+                    <li>@doc.FileName (@doc.MimeType) - excerpts: @doc.ExcerptCount</li>
+                }
+            </ul>
+
+            <h3>Excerpts</h3>
+            <div class="field-grid">
+                <InputSelect @bind-Value="_selectedDocumentId" class="text-input">
+                    <option value="">Select document</option>
+                    @foreach (var doc in _documents)
+                    {
+                        <option value="@doc.Id">@doc.FileName</option>
+                    }
+                </InputSelect>
+                <button class="btn-small" @onclick="LoadExcerptsAsync">Load excerpts</button>
+            </div>
+
+            <EditForm Model="_newExcerpt" OnValidSubmit="CreateExcerptAsync">
+                <div class="field-grid">
+                    <InputText @bind-Value="_newExcerpt.Title" class="text-input" placeholder="Excerpt title" />
+                    <InputText @bind-Value="_newExcerpt.PageRef" class="text-input" placeholder="Page ref" />
+                    <InputTextArea @bind-Value="_newExcerpt.Text" class="text-input" />
+                </div>
+                <button class="btn-small" type="submit">Create excerpt</button>
+            </EditForm>
+
+            <ul>
+                @foreach (var excerpt in _excerpts)
+                {
+                    <li>@excerpt.Title [@excerpt.PageRef] - @excerpt.Text</li>
+                }
+            </ul>
+
+            <h3>Link evidence</h3>
+            <EditForm Model="_linkEvidence" OnValidSubmit="LinkEvidenceAsync">
+                <div class="field-grid">
+                    <InputSelect @bind-Value="_linkEvidence.EvidenceExcerptId" class="text-input">
+                        <option value="">Select excerpt</option>
+                        @foreach (var excerpt in _excerpts)
+                        {
+                            <option value="@excerpt.Id">@excerpt.Title</option>
+                        }
+                    </InputSelect>
+                    <InputSelect @bind-Value="_linkEvidence.TargetType" @bind-Value:after="OnEvidenceTargetTypeChanged" class="text-input">
+                        <option value="ActionItem">ActionItem</option>
+                        <option value="Finding">Finding</option>
+                    </InputSelect>
+                    <InputSelect @bind-Value="_linkEvidence.TargetId" class="text-input">
+                        <option value="">Select target</option>
+                        @if (_linkEvidence.TargetType == "Finding")
+                        {
+                            @foreach (var finding in _findings)
+                            {
+                                <option value="@finding.Id">@finding.Title</option>
+                            }
+                        }
+                        else
+                        {
+                            @foreach (var action in _actions)
+                            {
+                                <option value="@action.Id">@action.Title</option>
+                            }
+                        }
+                    </InputSelect>
+                </div>
+                <button class="btn-small" type="submit">Create evidence link</button>
+            </EditForm>
+
             <h3>Evidence Gaps</h3>
             <ul>
                 @foreach (var gap in _evidenceGaps.ActionGaps)
@@ -332,6 +403,9 @@ else
     private Normyx.Web.Models.ActionBoardDto _actionBoard = new([], [], [], []);
     private Normyx.Web.Models.EvidenceGapsResponse _evidenceGaps = new(0, [], []);
     private List<Normyx.Web.Models.RagSearchResultDto> _evidenceHits = [];
+    private List<Normyx.Web.Models.DocumentListItemDto> _documents = [];
+    private List<Normyx.Web.Models.EvidenceExcerptDto> _excerpts = [];
+    private Guid? _selectedDocumentId;
     private List<Normyx.Web.Models.ExportListItemDto> _exports = [];
     private List<Normyx.Web.Models.ActionReviewDto> _recentReviews = [];
 
@@ -342,6 +416,8 @@ else
     private readonly NewComponentForm _newComponent = new();
     private readonly NewFlowForm _newFlow = new();
     private readonly NewStoreForm _newStore = new();
+    private readonly NewExcerptForm _newExcerpt = new();
+    private readonly LinkEvidenceForm _linkEvidence = new();
     private readonly ExportForm _exportForm = new();
     private string _evidenceQuery = "DPIA lawful basis transfer";
 
@@ -397,6 +473,14 @@ else
         _actionBoard = (await Api.GetAsync<Normyx.Web.Models.ActionBoardDto>($"/actions/board/{versionId}")) ?? new([], [], [], []);
         _evidenceGaps = await Api.GetAsync<Normyx.Web.Models.EvidenceGapsResponse>($"/versions/{versionId}/evidence/gaps") ?? new(0, [], []);
         _exports = (await Api.GetAsync<List<Normyx.Web.Models.ExportListItemDto>>($"/exports/versions/{versionId}")) ?? [];
+        _documents = (await Api.GetAsync<List<Normyx.Web.Models.DocumentListItemDto>>("/documents")) ?? [];
+
+        if (_selectedDocumentId is null || !_documents.Any(x => x.Id == _selectedDocumentId.Value))
+        {
+            _selectedDocumentId = _documents.FirstOrDefault()?.Id;
+        }
+
+        await LoadExcerptsAsync();
 
         var questionnaire = await Api.GetAsync<Normyx.Web.Models.QuestionnaireResponse>($"/versions/{versionId}/questionnaire");
         if (questionnaire is not null)
@@ -426,6 +510,7 @@ else
         }
 
         _recentReviews = _recentReviews.OrderByDescending(x => x.ReviewedAt).ToList();
+        EnsureEvidenceLinkDefaults();
     }
 
     private async Task RunAssessmentAsync()
@@ -603,6 +688,76 @@ else
         }
     }
 
+    private async Task LoadExcerptsAsync()
+    {
+        if (_selectedDocumentId is null)
+        {
+            _excerpts = [];
+            _linkEvidence.EvidenceExcerptId = null;
+            return;
+        }
+
+        _excerpts = (await Api.GetAsync<List<Normyx.Web.Models.EvidenceExcerptDto>>($"/documents/{_selectedDocumentId}/excerpts")) ?? [];
+        if (_linkEvidence.EvidenceExcerptId is null || !_excerpts.Any(x => x.Id == _linkEvidence.EvidenceExcerptId.Value))
+        {
+            _linkEvidence.EvidenceExcerptId = _excerpts.FirstOrDefault()?.Id;
+        }
+    }
+
+    private async Task CreateExcerptAsync()
+    {
+        if (_selectedDocumentId is null || string.IsNullOrWhiteSpace(_newExcerpt.Title) || string.IsNullOrWhiteSpace(_newExcerpt.Text))
+        {
+            return;
+        }
+
+        try
+        {
+            await Api.PostAsync($"/documents/{_selectedDocumentId}/excerpts", new
+            {
+                title = _newExcerpt.Title,
+                text = _newExcerpt.Text,
+                pageRef = _newExcerpt.PageRef
+            });
+
+            _newExcerpt.Reset();
+            _uploadMessage = "Evidence excerpt created.";
+            await LoadExcerptsAsync();
+        }
+        catch (Exception ex)
+        {
+            _error = ex.Message;
+        }
+    }
+
+    private async Task LinkEvidenceAsync()
+    {
+        if (_linkEvidence.EvidenceExcerptId is null || _linkEvidence.TargetId is null)
+        {
+            return;
+        }
+
+        try
+        {
+            await Api.PostAsync("/documents/evidence-links", new
+            {
+                targetType = _linkEvidence.TargetType,
+                targetId = _linkEvidence.TargetId,
+                evidenceExcerptId = _linkEvidence.EvidenceExcerptId
+            });
+
+            _uploadMessage = "Evidence link created.";
+            if (_currentVersionId is not null)
+            {
+                await LoadVersionDataAsync(_currentVersionId.Value);
+            }
+        }
+        catch (Exception ex)
+        {
+            _error = ex.Message;
+        }
+    }
+
     private async Task UpdateActionStatusAsync(Guid actionId, int status)
     {
         try
@@ -694,6 +849,39 @@ else
     private string ResolveComponentName(Guid componentId)
         => _architecture.Components.FirstOrDefault(c => c.Id == componentId)?.Name ?? componentId.ToString()[..8];
 
+    private void EnsureEvidenceLinkDefaults()
+    {
+        if (_linkEvidence.TargetType == "Finding")
+        {
+            if (_linkEvidence.TargetId is null || !_findings.Any(x => x.Id == _linkEvidence.TargetId.Value))
+            {
+                _linkEvidence.TargetId = _findings.FirstOrDefault()?.Id;
+            }
+            return;
+        }
+
+        _linkEvidence.TargetType = "ActionItem";
+        if (_linkEvidence.TargetId is null || !_actions.Any(x => x.Id == _linkEvidence.TargetId.Value))
+        {
+            _linkEvidence.TargetId = _actions.FirstOrDefault()?.Id;
+        }
+    }
+
+    private Task OnEvidenceTargetTypeChanged()
+    {
+        if (_linkEvidence.TargetType == "Finding")
+        {
+            _linkEvidence.TargetId = _findings.FirstOrDefault()?.Id;
+        }
+        else
+        {
+            _linkEvidence.TargetType = "ActionItem";
+            _linkEvidence.TargetId = _actions.FirstOrDefault()?.Id;
+        }
+
+        return Task.CompletedTask;
+    }
+
     private sealed class QuestionnaireForm
     {
         public string AutomatedDecisionMaking { get; set; } = "true";
@@ -765,5 +953,26 @@ else
             EncryptionAtRest = true;
             AccessModel = "RBAC";
         }
+    }
+
+    private sealed class NewExcerptForm
+    {
+        public string Title { get; set; } = "Manual excerpt";
+        public string Text { get; set; } = string.Empty;
+        public string PageRef { get; set; } = "manual";
+
+        public void Reset()
+        {
+            Title = "Manual excerpt";
+            Text = string.Empty;
+            PageRef = "manual";
+        }
+    }
+
+    private sealed class LinkEvidenceForm
+    {
+        public Guid? EvidenceExcerptId { get; set; }
+        public string TargetType { get; set; } = "ActionItem";
+        public Guid? TargetId { get; set; }
     }
 }

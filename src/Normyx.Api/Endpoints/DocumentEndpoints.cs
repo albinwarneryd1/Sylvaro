@@ -14,6 +14,7 @@ public static class DocumentEndpoints
         var group = app.MapGroup("/documents").WithTags("Documents").RequireAuthorization();
 
         group.MapGet("", ListDocumentsAsync);
+        group.MapGet("/{documentId:guid}/excerpts", ListExcerptsAsync);
         group.MapPost("/upload", UploadDocumentAsync).DisableAntiforgery();
         group.MapGet("/{documentId:guid}/download", DownloadDocumentAsync);
         group.MapPost("/{documentId:guid}/excerpts", CreateExcerptAsync);
@@ -42,6 +43,33 @@ public static class DocumentEndpoints
             .ToListAsync();
 
         return Results.Ok(docs);
+    }
+
+    private static async Task<IResult> ListExcerptsAsync([FromRoute] Guid documentId, NormyxDbContext dbContext, ICurrentUserContext currentUser)
+    {
+        var tenantId = TenantContext.RequireTenantId(currentUser);
+        var documentInTenant = await dbContext.Documents.AnyAsync(x => x.Id == documentId && x.TenantId == tenantId);
+        if (!documentInTenant)
+        {
+            return Results.NotFound();
+        }
+
+        var excerpts = await dbContext.EvidenceExcerpts
+            .Where(x => x.DocumentId == documentId)
+            .OrderByDescending(x => x.CreatedAt)
+            .Select(x => new
+            {
+                x.Id,
+                x.DocumentId,
+                x.Title,
+                x.Text,
+                x.PageRef,
+                x.CreatedByUserId,
+                x.CreatedAt
+            })
+            .ToListAsync();
+
+        return Results.Ok(excerpts);
     }
 
     private static async Task<IResult> UploadDocumentAsync(
