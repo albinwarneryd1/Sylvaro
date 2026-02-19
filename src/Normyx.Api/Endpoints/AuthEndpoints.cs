@@ -1,3 +1,5 @@
+using System.Security.Cryptography;
+using System.Text;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.Mvc;
@@ -16,7 +18,7 @@ public static class AuthEndpoints
 {
     public static IEndpointRouteBuilder MapAuthEndpoints(this IEndpointRouteBuilder app)
     {
-        var group = app.MapGroup("/auth").WithTags("Auth");
+        var group = app.MapGroup("/auth").WithTags("Auth").RequireRateLimiting("auth");
 
         group.MapPost("/register", RegisterAsync).AllowAnonymous();
         group.MapPost("/login", LoginAsync).AllowAnonymous();
@@ -66,7 +68,7 @@ public static class AuthEndpoints
         {
             Id = Guid.NewGuid(),
             UserId = user.Id,
-            Token = refreshTokenRaw,
+            Token = HashToken(refreshTokenRaw),
             ExpiresAt = DateTimeOffset.UtcNow.AddDays(jwtOptions.Value.RefreshTokenDays)
         });
 
@@ -119,7 +121,7 @@ public static class AuthEndpoints
         {
             Id = Guid.NewGuid(),
             UserId = user.Id,
-            Token = refreshTokenRaw,
+            Token = HashToken(refreshTokenRaw),
             ExpiresAt = refreshExpiresAt
         });
 
@@ -137,36 +139,64 @@ public static class AuthEndpoints
         IJwtTokenService jwtTokenService,
         IOptions<JwtOptions> jwtOptions)
     {
-        var refreshToken = await dbContext.RefreshTokens
-            .Include(x => x.User)
-            .FirstOrDefaultAsync(x => x.Token == request.RefreshToken);
+        if (string.IsNullOrWhiteSpace(request.RefreshToken))
+        {
+            return Results.Unauthorized();
+        }
 
-        if (refreshToken is null || refreshToken.RevokedAt is not null || refreshToken.ExpiresAt < DateTimeOffset.UtcNow)
+        var tokenHash = HashToken(request.RefreshToken);
+        var tokenSnapshot = await dbContext.RefreshTokens
+            .AsNoTracking()
+            .Where(x => x.Token == tokenHash)
+            .Select(x => new
+            {
+                x.Id,
+                x.UserId,
+                x.ExpiresAt,
+                x.RevokedAt
+            })
+            .FirstOrDefaultAsync();
+
+        var now = DateTimeOffset.UtcNow;
+        if (tokenSnapshot is null || tokenSnapshot.RevokedAt is not null || tokenSnapshot.ExpiresAt < now)
+        {
+            return Results.Unauthorized();
+        }
+
+        var revokedRows = await dbContext.RefreshTokens
+            .Where(x => x.Id == tokenSnapshot.Id && x.RevokedAt == null && x.ExpiresAt >= now)
+            .ExecuteUpdateAsync(setters => setters.SetProperty(x => x.RevokedAt, now));
+
+        if (revokedRows == 0)
+        {
+            return Results.Unauthorized();
+        }
+
+        var user = await dbContext.Users.FirstOrDefaultAsync(x => x.Id == tokenSnapshot.UserId && x.DisabledAt == null);
+        if (user is null)
         {
             return Results.Unauthorized();
         }
 
         var roles = await dbContext.UserRoles
-            .Where(ur => ur.UserId == refreshToken.UserId)
+            .Where(ur => ur.UserId == tokenSnapshot.UserId)
             .Join(dbContext.Roles, ur => ur.RoleId, r => r.Id, (_, role) => role.Name)
             .ToListAsync();
 
-        refreshToken.RevokedAt = DateTimeOffset.UtcNow;
-
         var newRefresh = jwtTokenService.CreateRefreshToken();
-        var refreshExpiresAt = DateTimeOffset.UtcNow.AddDays(jwtOptions.Value.RefreshTokenDays);
+        var refreshExpiresAt = now.AddDays(jwtOptions.Value.RefreshTokenDays);
         dbContext.RefreshTokens.Add(new RefreshToken
         {
             Id = Guid.NewGuid(),
-            UserId = refreshToken.UserId,
-            Token = newRefresh,
+            UserId = tokenSnapshot.UserId,
+            Token = HashToken(newRefresh),
             ExpiresAt = refreshExpiresAt
         });
 
         await dbContext.SaveChangesAsync();
 
         return Results.Ok(new AuthResponse(
-            jwtTokenService.CreateAccessToken(refreshToken.User, roles),
+            jwtTokenService.CreateAccessToken(user, roles),
             newRefresh,
             refreshExpiresAt));
     }
@@ -181,17 +211,23 @@ public static class AuthEndpoints
             return Results.Unauthorized();
         }
 
-        var refreshToken = await dbContext.RefreshTokens
-            .FirstOrDefaultAsync(x => x.Token == request.RefreshToken && x.UserId == currentUser.UserId.Value);
-
-        if (refreshToken is null)
+        if (string.IsNullOrWhiteSpace(request.RefreshToken))
         {
-            return Results.NotFound();
+            return Results.NoContent();
         }
 
-        refreshToken.RevokedAt = DateTimeOffset.UtcNow;
-        await dbContext.SaveChangesAsync();
+        var tokenHash = HashToken(request.RefreshToken);
+        await dbContext.RefreshTokens
+            .Where(x => x.Token == tokenHash && x.UserId == currentUser.UserId.Value && x.RevokedAt == null)
+            .ExecuteUpdateAsync(setters => setters.SetProperty(x => x.RevokedAt, DateTimeOffset.UtcNow));
 
         return Results.NoContent();
+    }
+
+    private static string HashToken(string token)
+    {
+        var bytes = Encoding.UTF8.GetBytes(token.Trim());
+        var hash = SHA256.HashData(bytes);
+        return Convert.ToHexString(hash);
     }
 }

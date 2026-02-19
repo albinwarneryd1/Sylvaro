@@ -45,6 +45,8 @@ public class NormyxDbContext(DbContextOptions<NormyxDbContext> options) : DbCont
 
         modelBuilder.Entity<User>().HasIndex(x => new { x.TenantId, x.Email }).IsUnique();
         modelBuilder.Entity<Role>().HasIndex(x => x.Name).IsUnique();
+        modelBuilder.Entity<RefreshToken>().HasIndex(x => x.Token).IsUnique();
+        modelBuilder.Entity<RefreshToken>().HasIndex(x => new { x.UserId, x.ExpiresAt });
         modelBuilder.Entity<AiSystem>().HasIndex(x => new { x.TenantId, x.Name });
         modelBuilder.Entity<AiSystemVersion>().HasIndex(x => new { x.AiSystemId, x.VersionNumber }).IsUnique();
 
