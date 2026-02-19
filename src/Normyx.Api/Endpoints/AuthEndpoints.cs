@@ -32,7 +32,8 @@ public static class AuthEndpoints
         [FromBody] RegisterRequest request,
         NormyxDbContext dbContext,
         IJwtTokenService jwtTokenService,
-        IOptions<JwtOptions> jwtOptions)
+        IOptions<JwtOptions> jwtOptions,
+        HttpContext httpContext)
     {
         var existingTenant = await dbContext.Tenants.FirstOrDefaultAsync(x => x.Name == request.TenantName);
         if (existingTenant is not null)
@@ -63,21 +64,19 @@ public static class AuthEndpoints
         dbContext.Users.Add(user);
         dbContext.UserRoles.Add(new UserRole { UserId = user.Id, RoleId = adminRole.Id });
 
-        var refreshTokenRaw = jwtTokenService.CreateRefreshToken();
-        dbContext.RefreshTokens.Add(new RefreshToken
-        {
-            Id = Guid.NewGuid(),
-            UserId = user.Id,
-            Token = HashToken(refreshTokenRaw),
-            ExpiresAt = DateTimeOffset.UtcNow.AddDays(jwtOptions.Value.RefreshTokenDays)
-        });
+        var (refreshTokenRaw, refreshExpiresAt) = IssueRefreshToken(
+            dbContext,
+            jwtTokenService,
+            user.Id,
+            jwtOptions.Value.RefreshTokenDays,
+            httpContext);
 
         await dbContext.SaveChangesAsync();
 
         var response = new AuthResponse(
             jwtTokenService.CreateAccessToken(user, [RoleNames.Admin]),
             refreshTokenRaw,
-            DateTimeOffset.UtcNow.AddDays(jwtOptions.Value.RefreshTokenDays));
+            refreshExpiresAt);
 
         return Results.Ok(response);
     }
@@ -86,7 +85,8 @@ public static class AuthEndpoints
         [FromBody] LoginRequest request,
         NormyxDbContext dbContext,
         IJwtTokenService jwtTokenService,
-        IOptions<JwtOptions> jwtOptions)
+        IOptions<JwtOptions> jwtOptions,
+        HttpContext httpContext)
     {
         var tenant = await dbContext.Tenants.FirstOrDefaultAsync(x => x.Name == request.TenantName);
         if (tenant is null)
@@ -114,16 +114,12 @@ public static class AuthEndpoints
             .Join(dbContext.Roles, ur => ur.RoleId, r => r.Id, (_, role) => role.Name)
             .ToListAsync();
 
-        var refreshTokenRaw = jwtTokenService.CreateRefreshToken();
-        var refreshExpiresAt = DateTimeOffset.UtcNow.AddDays(jwtOptions.Value.RefreshTokenDays);
-
-        dbContext.RefreshTokens.Add(new RefreshToken
-        {
-            Id = Guid.NewGuid(),
-            UserId = user.Id,
-            Token = HashToken(refreshTokenRaw),
-            ExpiresAt = refreshExpiresAt
-        });
+        var (refreshTokenRaw, refreshExpiresAt) = IssueRefreshToken(
+            dbContext,
+            jwtTokenService,
+            user.Id,
+            jwtOptions.Value.RefreshTokenDays,
+            httpContext);
 
         await dbContext.SaveChangesAsync();
 
@@ -137,7 +133,8 @@ public static class AuthEndpoints
         [FromBody] RefreshRequest request,
         NormyxDbContext dbContext,
         IJwtTokenService jwtTokenService,
-        IOptions<JwtOptions> jwtOptions)
+        IOptions<JwtOptions> jwtOptions,
+        HttpContext httpContext)
     {
         if (string.IsNullOrWhiteSpace(request.RefreshToken))
         {
@@ -183,15 +180,12 @@ public static class AuthEndpoints
             .Join(dbContext.Roles, ur => ur.RoleId, r => r.Id, (_, role) => role.Name)
             .ToListAsync();
 
-        var newRefresh = jwtTokenService.CreateRefreshToken();
-        var refreshExpiresAt = now.AddDays(jwtOptions.Value.RefreshTokenDays);
-        dbContext.RefreshTokens.Add(new RefreshToken
-        {
-            Id = Guid.NewGuid(),
-            UserId = tokenSnapshot.UserId,
-            Token = HashToken(newRefresh),
-            ExpiresAt = refreshExpiresAt
-        });
+        var (newRefresh, refreshExpiresAt) = IssueRefreshToken(
+            dbContext,
+            jwtTokenService,
+            tokenSnapshot.UserId,
+            jwtOptions.Value.RefreshTokenDays,
+            httpContext);
 
         await dbContext.SaveChangesAsync();
 
@@ -229,5 +223,39 @@ public static class AuthEndpoints
         var bytes = Encoding.UTF8.GetBytes(token.Trim());
         var hash = SHA256.HashData(bytes);
         return Convert.ToHexString(hash);
+    }
+
+    private static (string RefreshToken, DateTimeOffset ExpiresAt) IssueRefreshToken(
+        NormyxDbContext dbContext,
+        IJwtTokenService jwtTokenService,
+        Guid userId,
+        int refreshTokenDays,
+        HttpContext httpContext)
+    {
+        var refreshTokenRaw = jwtTokenService.CreateRefreshToken();
+        var refreshExpiresAt = DateTimeOffset.UtcNow.AddDays(refreshTokenDays);
+
+        dbContext.RefreshTokens.Add(new RefreshToken
+        {
+            Id = Guid.NewGuid(),
+            UserId = userId,
+            Token = HashToken(refreshTokenRaw),
+            CreatedIp = httpContext.Connection.RemoteIpAddress?.ToString() ?? "unknown",
+            UserAgent = NormalizeUserAgent(httpContext.Request.Headers.UserAgent.ToString()),
+            ExpiresAt = refreshExpiresAt
+        });
+
+        return (refreshTokenRaw, refreshExpiresAt);
+    }
+
+    private static string NormalizeUserAgent(string userAgent)
+    {
+        if (string.IsNullOrWhiteSpace(userAgent))
+        {
+            return "unknown";
+        }
+
+        var sanitized = userAgent.Trim();
+        return sanitized.Length <= 256 ? sanitized : sanitized[..256];
     }
 }

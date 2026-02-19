@@ -196,6 +196,7 @@ app.MapFindingEndpoints();
 app.MapActionEndpoints();
 app.MapExportEndpoints();
 app.MapDashboardEndpoints();
+app.MapSecurityEndpoints();
 
 app.Run();
 
