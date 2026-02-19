@@ -386,15 +386,23 @@ else
 
         @if (_currentVersionId is not null && IsTab("Actions"))
         {
-            <h2>Compliance Obligation Board</h2>
+            <h2>Remediation Intelligence Board</h2>
+            <p class="muted">Kanban execution with compliance impact, evidence completeness, and sign-off controls.</p>
             <div class="kanban-board">
                 <div class="kanban-col">
                     <h4>Critical / New</h4>
-                    @foreach (var action in _actionBoard.New)
+                    @foreach (var action in _actionBoard.New.OrderByDescending(GetActionImpactScore))
                     {
                         <article class="kanban-card" data-priority="@action.Priority">
                             <strong>@action.Title</strong>
-                            <span>@action.Priority / @action.OwnerRole</span>
+                            <div class="status-line">
+                                <span class="@($"risk-pill {ToRiskPillClass(MapPriorityToSeverity(action.Priority))}")">@action.Priority</span>
+                                <span class="risk-pill info">Impact @GetActionImpactScore(action)</span>
+                                <span class="risk-pill warning">Risk Reduction @GetActionRiskReduction(action)%</span>
+                            </div>
+                            <span><strong class="avatar-chip">@GetOwnerAvatar(action.OwnerRole)</strong> @action.OwnerRole</span>
+                            <span>Due: @(action.DueDate?.ToString("yyyy-MM-dd") ?? "Not set")</span>
+                            <span>Evidence: @GetActionEvidencePercent(action)%</span>
                             <div class="btn-row">
                                 <button class="btn-small" @onclick="() => UpdateActionStatusAsync(action.Id, 1)">Move to In Progress</button>
                             </div>
@@ -404,11 +412,18 @@ else
 
                 <div class="kanban-col">
                     <h4>In Progress</h4>
-                    @foreach (var action in _actionBoard.InProgress)
+                    @foreach (var action in _actionBoard.InProgress.OrderByDescending(GetActionImpactScore))
                     {
                         <article class="kanban-card" data-priority="@action.Priority">
                             <strong>@action.Title</strong>
-                            <span>@action.Priority / @action.OwnerRole</span>
+                            <div class="status-line">
+                                <span class="@($"risk-pill {ToRiskPillClass(MapPriorityToSeverity(action.Priority))}")">@action.Priority</span>
+                                <span class="risk-pill info">Impact @GetActionImpactScore(action)</span>
+                                <span class="risk-pill warning">Risk Reduction @GetActionRiskReduction(action)%</span>
+                            </div>
+                            <span><strong class="avatar-chip">@GetOwnerAvatar(action.OwnerRole)</strong> @action.OwnerRole</span>
+                            <span>Due: @(action.DueDate?.ToString("yyyy-MM-dd") ?? "Not set")</span>
+                            <span>Evidence: @GetActionEvidencePercent(action)%</span>
                             <div class="btn-row">
                                 <button class="btn-small" @onclick="() => UpdateActionStatusAsync(action.Id, 2)">Mark Complete</button>
                                 <button class="btn-small" @onclick="() => ReviewActionAsync(action.Id, 1)">Approve & Sign Off</button>
@@ -421,10 +436,12 @@ else
 
                 <div class="kanban-col">
                     <h4>Completed</h4>
-                    @foreach (var action in _actionBoard.Done)
+                    @foreach (var action in _actionBoard.Done.OrderByDescending(GetActionImpactScore))
                     {
                         <article class="kanban-card" data-priority="@action.Priority">
                             <strong>@action.Title</strong>
+                            <span><strong class="avatar-chip">@GetOwnerAvatar(action.OwnerRole)</strong> @action.OwnerRole</span>
+                            <span>Evidence: @GetActionEvidencePercent(action)%</span>
                             <span>Approved: @action.ApprovedAt?.ToString("u")</span>
                         </article>
                     }
@@ -432,10 +449,12 @@ else
 
                 <div class="kanban-col">
                     <h4>Accepted Risk</h4>
-                    @foreach (var action in _actionBoard.AcceptedRisk)
+                    @foreach (var action in _actionBoard.AcceptedRisk.OrderByDescending(GetActionImpactScore))
                     {
                         <article class="kanban-card" data-priority="@action.Priority">
                             <strong>@action.Title</strong>
+                            <span class="risk-pill warning">Escalation Required</span>
+                            <span><strong class="avatar-chip">@GetOwnerAvatar(action.OwnerRole)</strong> @action.OwnerRole</span>
                         </article>
                     }
                 </div>
@@ -1298,6 +1317,70 @@ else
         yield return "Triggered policy references: AI_ACT.CLASSIFICATION, GDPR.DPIA.TRIGGER, NIS2.BASELINE.CONTROLS.";
         yield return "Risk reflects current architecture sensitivity, transfer patterns, and external trust boundaries.";
         yield return $"Evidence gaps currently open: {_evidenceGaps.TotalGaps}. Add evidence links to reduce exposure.";
+    }
+
+    private static string MapPriorityToSeverity(string priority)
+        => priority switch
+        {
+            "Critical" => "Critical",
+            "High" => "High",
+            "Medium" => "Medium",
+            "Low" => "Low",
+            _ => "Low"
+        };
+
+    private int GetActionImpactScore(Normyx.Web.Models.ActionItemDto action)
+    {
+        var priorityScore = action.Priority switch
+        {
+            "Critical" => 45,
+            "High" => 35,
+            "Medium" => 22,
+            _ => 12
+        };
+
+        var evidenceScore = GetActionEvidencePercent(action) >= 100 ? -8 : 10;
+        var dueDateScore = action.DueDate is null
+            ? 6
+            : action.DueDate <= DateTimeOffset.UtcNow.AddDays(7) ? 12 : 4;
+
+        return Math.Clamp(priorityScore + evidenceScore + dueDateScore, 1, 100);
+    }
+
+    private int GetActionRiskReduction(Normyx.Web.Models.ActionItemDto action)
+        => action.Priority switch
+        {
+            "Critical" => 40,
+            "High" => 32,
+            "Medium" => 20,
+            _ => 12
+        };
+
+    private int GetActionEvidencePercent(Normyx.Web.Models.ActionItemDto action)
+    {
+        var linked = _evidenceMap.Actions.FirstOrDefault(x => x.TargetId == action.Id)?.Evidence.Count ?? 0;
+        if (linked <= 0)
+        {
+            return 0;
+        }
+
+        return linked >= 2 ? 100 : 50;
+    }
+
+    private static string GetOwnerAvatar(string ownerRole)
+    {
+        if (string.IsNullOrWhiteSpace(ownerRole))
+        {
+            return "NA";
+        }
+
+        var parts = ownerRole.Split(' ', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
+        if (parts.Length == 1)
+        {
+            return parts[0].Length <= 2 ? parts[0].ToUpperInvariant() : parts[0][..2].ToUpperInvariant();
+        }
+
+        return string.Concat(parts.Select(p => p[0])).ToUpperInvariant();
     }
 
     private string GetRiskCellClass(int index)

@@ -450,6 +450,20 @@ input.text-input {
     border-color: #efc8d0;
 }
 
+.avatar-chip {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 1.2rem;
+    height: 1.2rem;
+    border-radius: 999px;
+    background: #dbe6f4;
+    border: 1px solid #b6c8de;
+    color: #1e3656;
+    font-size: 0.62rem;
+    margin-right: 0.3rem;
+}
+
 .panel-grid {
     display: grid;
     grid-template-columns: repeat(12, minmax(0, 1fr));
