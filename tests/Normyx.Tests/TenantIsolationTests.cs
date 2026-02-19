@@ -1,5 +1,7 @@
 using System.Net.Http.Headers;
 using System.Net.Http.Json;
+using System.Text;
+using System.Text.Json;
 using DotNet.Testcontainers.Builders;
 using Microsoft.AspNetCore.Mvc.Testing;
 using Microsoft.AspNetCore.Hosting;
@@ -96,6 +98,86 @@ public class TenantIsolationTests : IAsyncLifetime
         Assert.DoesNotContain("TenantB Secret System", payload, StringComparison.OrdinalIgnoreCase);
     }
 
+    [Fact]
+    public async Task TenantAdmin_CanListRoles()
+    {
+        if (!_dockerAvailable)
+        {
+            return;
+        }
+
+        var client = _factory.CreateClient(new WebApplicationFactoryClientOptions
+        {
+            BaseAddress = new Uri("http://localhost")
+        });
+
+        var token = await LoginAsync(client, "NordicFin AB", "admin@nordicfin.example", "ChangeMe123!");
+
+        using var request = new HttpRequestMessage(HttpMethod.Get, "/tenants/roles");
+        request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", token);
+        var response = await client.SendAsync(request);
+        response.EnsureSuccessStatusCode();
+
+        var payload = await response.Content.ReadAsStringAsync();
+        Assert.Contains("Admin", payload, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("ComplianceOfficer", payload, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("SecurityLead", payload, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("ProductOwner", payload, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("Auditor", payload, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public async Task ActionReview_UpdatesStatus_AndCreatesReviewHistory()
+    {
+        if (!_dockerAvailable)
+        {
+            return;
+        }
+
+        var client = _factory.CreateClient(new WebApplicationFactoryClientOptions
+        {
+            BaseAddress = new Uri("http://localhost")
+        });
+
+        var token = await LoginAsync(client, "NordicFin AB", "admin@nordicfin.example", "ChangeMe123!");
+
+        var systemListResponse = await SendAuthorizedAsync(client, token, HttpMethod.Get, "/aisystems");
+        systemListResponse.EnsureSuccessStatusCode();
+        var systemListPayload = await systemListResponse.Content.ReadAsStringAsync();
+        var systemId = ReadFirstGuid(systemListPayload, "id");
+
+        var versionListResponse = await SendAuthorizedAsync(client, token, HttpMethod.Get, $"/aisystems/{systemId}/versions");
+        versionListResponse.EnsureSuccessStatusCode();
+        var versionListPayload = await versionListResponse.Content.ReadAsStringAsync();
+        var versionId = ReadFirstGuid(versionListPayload, "id");
+
+        var assessmentRunResponse = await SendAuthorizedAsync(client, token, HttpMethod.Post, $"/versions/{versionId}/assessments/run", new { });
+        assessmentRunResponse.EnsureSuccessStatusCode();
+
+        var boardResponse = await SendAuthorizedAsync(client, token, HttpMethod.Get, $"/actions/board/{versionId}");
+        boardResponse.EnsureSuccessStatusCode();
+        var boardPayload = await boardResponse.Content.ReadAsStringAsync();
+        var actionId = ReadFirstActionIdFromBoard(boardPayload);
+
+        var reviewResponse = await SendAuthorizedAsync(client, token, HttpMethod.Post, $"/actions/{actionId}/reviews", new
+        {
+            decision = 1,
+            comment = "Integration test approval"
+        });
+        Assert.Equal(System.Net.HttpStatusCode.Created, reviewResponse.StatusCode);
+
+        var reviewsResponse = await SendAuthorizedAsync(client, token, HttpMethod.Get, $"/actions/{actionId}/reviews");
+        reviewsResponse.EnsureSuccessStatusCode();
+        var reviewsPayload = await reviewsResponse.Content.ReadAsStringAsync();
+        Assert.Contains("Approved", reviewsPayload, StringComparison.OrdinalIgnoreCase);
+
+        var actionsResponse = await SendAuthorizedAsync(client, token, HttpMethod.Get, $"/actions/version/{versionId}");
+        actionsResponse.EnsureSuccessStatusCode();
+        var actionsPayload = await actionsResponse.Content.ReadAsStringAsync();
+        Assert.Contains(actionId.ToString(), actionsPayload, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("Done", actionsPayload, StringComparison.OrdinalIgnoreCase);
+    }
+
     private static async Task<string> LoginAsync(HttpClient client, string tenant, string email, string password)
     {
         var response = await client.PostAsJsonAsync("/auth/login", new
@@ -109,6 +191,59 @@ public class TenantIsolationTests : IAsyncLifetime
         var auth = await response.Content.ReadFromJsonAsync<AuthResponse>();
         Assert.NotNull(auth);
         return auth!.AccessToken;
+    }
+
+    private static async Task<HttpResponseMessage> SendAuthorizedAsync(HttpClient client, string token, HttpMethod method, string url, object? body = null)
+    {
+        using var request = new HttpRequestMessage(method, url);
+        request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", token);
+
+        if (body is not null)
+        {
+            request.Content = new StringContent(JsonSerializer.Serialize(body), Encoding.UTF8, "application/json");
+        }
+
+        return await client.SendAsync(request);
+    }
+
+    private static Guid ReadFirstGuid(string json, string propertyName)
+    {
+        using var doc = JsonDocument.Parse(json);
+        var root = doc.RootElement;
+        if (root.ValueKind != JsonValueKind.Array || root.GetArrayLength() == 0)
+        {
+            throw new InvalidOperationException($"Expected a non-empty array for '{propertyName}'.");
+        }
+
+        var first = root[0];
+        if (!first.TryGetProperty(propertyName, out var idProp))
+        {
+            throw new InvalidOperationException($"Property '{propertyName}' was not found.");
+        }
+
+        return idProp.GetGuid();
+    }
+
+    private static Guid ReadFirstActionIdFromBoard(string json)
+    {
+        using var doc = JsonDocument.Parse(json);
+        var root = doc.RootElement;
+
+        foreach (var lane in new[] { "new", "inProgress", "done", "acceptedRisk" })
+        {
+            if (!root.TryGetProperty(lane, out var actions) || actions.ValueKind != JsonValueKind.Array || actions.GetArrayLength() == 0)
+            {
+                continue;
+            }
+
+            var first = actions[0];
+            if (first.TryGetProperty("id", out var idProp))
+            {
+                return idProp.GetGuid();
+            }
+        }
+
+        throw new InvalidOperationException("No action item found in any board lane.");
     }
 
     private sealed record AuthResponse(string AccessToken, string RefreshToken, DateTimeOffset RefreshTokenExpiresAt);
