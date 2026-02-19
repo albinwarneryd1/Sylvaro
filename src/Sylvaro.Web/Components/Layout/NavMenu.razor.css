@@ -1,17 +1,26 @@
 .menu-root {
     display: grid;
-    gap: 0.7rem;
-    padding: 0.9rem 0.6rem;
+    gap: 0.8rem;
+    padding: 0.85rem 0.65rem;
 }
 
-.menu-tenant,
-.menu-section {
+.menu-tenant {
     border: 1px solid var(--border-subtle);
     background: var(--surface-panel);
-    border-radius: var(--radius-sm);
-    padding: 0.55rem;
+    border-radius: 6px;
+    padding: 0.62rem;
     display: grid;
-    gap: 0.28rem;
+    gap: 0.22rem;
+}
+
+.menu-section {
+    display: grid;
+    gap: 0.18rem;
+}
+
+.menu-section + .menu-section {
+    padding-top: 0.55rem;
+    border-top: 1px solid var(--border-subtle);
 }
 
 .menu-title {
@@ -20,6 +29,7 @@
     letter-spacing: 0.16em;
     color: var(--text-muted);
     font-weight: 700;
+    margin-bottom: 0.18rem;
 }
 
 .menu-tenant strong {
@@ -34,15 +44,26 @@
 }
 
 .menu-link {
+    position: relative;
     color: var(--text-body);
     text-decoration: none;
-    padding: 0.46rem 0.48rem 0.46rem 0.64rem;
-    border-radius: 6px;
+    padding: 0.42rem 0.45rem 0.42rem 0.72rem;
+    border-radius: 4px;
     border: 1px solid transparent;
-    border-left: 2px solid transparent;
     transition: background-color 140ms ease, border-color 140ms ease, color 140ms ease;
     display: grid;
-    gap: 0.1rem;
+    gap: 0.08rem;
+}
+
+.menu-link::before {
+    content: "";
+    position: absolute;
+    left: 0.18rem;
+    top: 0.33rem;
+    bottom: 0.33rem;
+    width: 2px;
+    border-radius: 2px;
+    background: transparent;
 }
 
 .menu-link-title {
@@ -52,17 +73,31 @@
 }
 
 .menu-link-meta {
-    font-size: 0.67rem;
+    font-size: 0.66rem;
     color: var(--text-muted);
+    line-height: 1.28;
 }
 
 .menu-link:hover {
-    background: #f3eee6;
-    border-color: #dfd5c6;
+    background: #f6f1e9;
+    border-color: #ddd0be;
 }
 
 .menu-link.active {
-    border-left-color: var(--brand-primary);
-    background: #efe7dc;
-    border-color: #ddcfbc;
+    background: #f2eadd;
+    border-color: #d8c7ae;
+}
+
+.menu-link.active::before {
+    background: var(--brand-primary);
+}
+
+@media (max-width: 1100px) {
+    .menu-root {
+        gap: 0.56rem;
+    }
+
+    .menu-link-meta {
+        display: none;
+    }
 }
