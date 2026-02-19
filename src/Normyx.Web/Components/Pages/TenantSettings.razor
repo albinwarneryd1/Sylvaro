@@ -1,0 +1,123 @@
+@page "/tenant-settings"
+@inject Normyx.Web.Services.NormyxApiClient Api
+@inject Normyx.Web.Services.AuthSession Session
+@inject NavigationManager Nav
+
+<PageTitle>Tenant Settings - Normyx AI</PageTitle>
+
+@if (!Session.IsAuthenticated)
+{
+    <div class="card-shell"><p>Please <a href="/login">log in</a>.</p></div>
+}
+else
+{
+    <div class="card-shell">
+        <h1>Tenant Settings</h1>
+        <p>Manage users and roles.</p>
+
+        @if (!string.IsNullOrWhiteSpace(_error))
+        {
+            <div class="alert-danger">@_error</div>
+        }
+
+        @if (_tenant is not null)
+        {
+            <p><strong>@_tenant.Name</strong> (created @_tenant.CreatedAt.ToString("u"))</p>
+        }
+
+        <h2>Users</h2>
+        <table class="table-shell">
+            <thead><tr><th>Email</th><th>Name</th><th>Roles</th></tr></thead>
+            <tbody>
+            @foreach (var user in _users)
+            {
+                <tr>
+                    <td>@user.Email</td>
+                    <td>@user.DisplayName</td>
+                    <td>@string.Join(", ", user.Roles ?? [])</td>
+                </tr>
+            }
+            </tbody>
+        </table>
+
+        <h3>Add user</h3>
+        <EditForm Model="_newUser" OnValidSubmit="CreateUserAsync">
+            <div class="field-grid">
+                <InputText @bind-Value="_newUser.Email" class="text-input" placeholder="Email" />
+                <InputText @bind-Value="_newUser.DisplayName" class="text-input" placeholder="Display name" />
+                <InputText @bind-Value="_newUser.Password" class="text-input" type="password" placeholder="Password" />
+                <InputText @bind-Value="_newUser.RolesCsv" class="text-input" placeholder="Roles: ProductOwner,SecurityLead" />
+            </div>
+            <button class="btn-main" type="submit">Create user</button>
+        </EditForm>
+    </div>
+}
+
+@code {
+    private Normyx.Web.Models.TenantDto? _tenant;
+    private List<Normyx.Web.Models.UserDto> _users = [];
+    private string _error = string.Empty;
+    private readonly CreateUserForm _newUser = new();
+
+    protected override async Task OnInitializedAsync()
+    {
+        if (!Session.IsAuthenticated)
+        {
+            return;
+        }
+
+        await LoadAsync();
+    }
+
+    private async Task LoadAsync()
+    {
+        try
+        {
+            _tenant = await Api.GetAsync<Normyx.Web.Models.TenantDto>("/tenants/me");
+            _users = (await Api.GetAsync<List<Normyx.Web.Models.UserDto>>("/tenants/users")) ?? [];
+        }
+        catch (Exception ex)
+        {
+            _error = ex.Message;
+            Nav.NavigateTo("/login");
+        }
+    }
+
+    private async Task CreateUserAsync()
+    {
+        try
+        {
+            _error = string.Empty;
+            var roles = _newUser.RolesCsv.Split(',', StringSplitOptions.TrimEntries | StringSplitOptions.RemoveEmptyEntries);
+            await Api.PostAsync("/tenants/users", new
+            {
+                email = _newUser.Email,
+                displayName = _newUser.DisplayName,
+                password = _newUser.Password,
+                roles
+            });
+            await LoadAsync();
+            _newUser.Reset();
+        }
+        catch (Exception ex)
+        {
+            _error = ex.Message;
+        }
+    }
+
+    private sealed class CreateUserForm
+    {
+        public string Email { get; set; } = string.Empty;
+        public string DisplayName { get; set; } = string.Empty;
+        public string Password { get; set; } = string.Empty;
+        public string RolesCsv { get; set; } = "ProductOwner";
+
+        public void Reset()
+        {
+            Email = string.Empty;
+            DisplayName = string.Empty;
+            Password = string.Empty;
+            RolesCsv = "ProductOwner";
+        }
+    }
+}

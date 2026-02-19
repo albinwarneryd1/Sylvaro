@@ -1,0 +1,78 @@
+@page "/login"
+@inject Normyx.Web.Services.NormyxApiClient Api
+@inject Normyx.Web.Services.AuthSession Session
+@inject NavigationManager Nav
+
+<PageTitle>Login - Normyx AI</PageTitle>
+
+<div class="card-shell narrow">
+    <h1>Sign In</h1>
+    <p>Login with tenant, email and password.</p>
+
+    @if (!string.IsNullOrWhiteSpace(_error))
+    {
+        <div class="alert-danger">@_error</div>
+    }
+
+    <EditForm Model="_model" OnValidSubmit="OnSubmitAsync">
+        <div class="field">
+            <label>Tenant</label>
+            <InputText @bind-Value="_model.TenantName" class="text-input" />
+        </div>
+        <div class="field">
+            <label>Email</label>
+            <InputText @bind-Value="_model.Email" class="text-input" />
+        </div>
+        <div class="field">
+            <label>Password</label>
+            <InputText @bind-Value="_model.Password" type="password" class="text-input" />
+        </div>
+        <button class="btn-main" type="submit" disabled="@_loading">@(_loading ? "Signing in..." : "Sign in")</button>
+    </EditForm>
+</div>
+
+@code {
+    private readonly LoginModel _model = new("NordicFin AB", "admin@nordicfin.example", "ChangeMe123!");
+    private bool _loading;
+    private string _error = string.Empty;
+
+    private async Task OnSubmitAsync()
+    {
+        try
+        {
+            _loading = true;
+            _error = string.Empty;
+
+            var response = await Api.PostAsync<Normyx.Web.Models.AuthResponse>("/auth/login", new
+            {
+                tenantName = _model.TenantName,
+                email = _model.Email,
+                password = _model.Password
+            }, withAuth: false);
+
+            if (response is null)
+            {
+                _error = "Empty response from API.";
+                return;
+            }
+
+            Session.SetSession(_model.TenantName, _model.Email, response.AccessToken, response.RefreshToken, response.RefreshTokenExpiresAt);
+            Nav.NavigateTo("/");
+        }
+        catch (Exception ex)
+        {
+            _error = ex.Message;
+        }
+        finally
+        {
+            _loading = false;
+        }
+    }
+
+    private sealed record LoginModel(string TenantName, string Email, string Password)
+    {
+        public string TenantName { get; set; } = TenantName;
+        public string Email { get; set; } = Email;
+        public string Password { get; set; } = Password;
+    }
+}

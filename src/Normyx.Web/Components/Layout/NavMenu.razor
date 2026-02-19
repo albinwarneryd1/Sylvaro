@@ -1,30 +1,12 @@
-﻿<div class="top-row ps-3 navbar navbar-dark">
-    <div class="container-fluid">
-        <a class="navbar-brand" href="">Normyx.Web</a>
-    </div>
-</div>
+<nav class="menu-root">
+    <div class="menu-title">Workspace</div>
 
-<input type="checkbox" title="Navigation menu" class="navbar-toggler" />
+    <NavLink class="menu-link" href="" Match="NavLinkMatch.All">Dashboard</NavLink>
+    <NavLink class="menu-link" href="tenant-settings">Tenant Settings</NavLink>
+    <NavLink class="menu-link" href="ai-systems">AI Systems</NavLink>
+    <NavLink class="menu-link" href="audit-log">Audit Log</NavLink>
 
-<div class="nav-scrollable" onclick="document.querySelector('.navbar-toggler').click()">
-    <nav class="nav flex-column">
-        <div class="nav-item px-3">
-            <NavLink class="nav-link" href="" Match="NavLinkMatch.All">
-                <span class="bi bi-house-door-fill-nav-menu" aria-hidden="true"></span> Home
-            </NavLink>
-        </div>
-
-        <div class="nav-item px-3">
-            <NavLink class="nav-link" href="counter">
-                <span class="bi bi-plus-square-fill-nav-menu" aria-hidden="true"></span> Counter
-            </NavLink>
-        </div>
-
-        <div class="nav-item px-3">
-            <NavLink class="nav-link" href="weather">
-                <span class="bi bi-list-nested-nav-menu" aria-hidden="true"></span> Weather
-            </NavLink>
-        </div>
-    </nav>
-</div>
-
+    <div class="menu-title auth-title">Access</div>
+    <NavLink class="menu-link" href="login">Login</NavLink>
+    <NavLink class="menu-link" href="register">Register</NavLink>
+</nav>

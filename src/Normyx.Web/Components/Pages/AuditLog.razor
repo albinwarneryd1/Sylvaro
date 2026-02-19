@@ -1,0 +1,47 @@
+@page "/audit-log"
+@inject Normyx.Web.Services.NormyxApiClient Api
+@inject Normyx.Web.Services.AuthSession Session
+
+<PageTitle>Audit Log - Normyx AI</PageTitle>
+
+@if (!Session.IsAuthenticated)
+{
+    <div class="card-shell"><p>Please <a href="/login">log in</a>.</p></div>
+}
+else
+{
+    <div class="card-shell">
+        <h1>Audit Log</h1>
+        <p>Immutable trail of tenant events.</p>
+
+        <table class="table-shell">
+            <thead><tr><th>Timestamp</th><th>Action</th><th>Target</th><th>Actor</th><th>IP</th></tr></thead>
+            <tbody>
+                @foreach (var log in _logs)
+                {
+                    <tr>
+                        <td>@log.Timestamp.ToString("u")</td>
+                        <td>@log.ActionType</td>
+                        <td>@log.TargetType</td>
+                        <td>@log.ActorUserId</td>
+                        <td>@log.Ip</td>
+                    </tr>
+                }
+            </tbody>
+        </table>
+    </div>
+}
+
+@code {
+    private List<Normyx.Web.Models.AuditLogDto> _logs = [];
+
+    protected override async Task OnInitializedAsync()
+    {
+        if (!Session.IsAuthenticated)
+        {
+            return;
+        }
+
+        _logs = (await Api.GetAsync<List<Normyx.Web.Models.AuditLogDto>>("/audit?take=200")) ?? [];
+    }
+}

@@ -1,16 +1,32 @@
-﻿@inherits LayoutComponentBase
+@inherits LayoutComponentBase
+@inject Normyx.Web.Services.AuthSession Session
+@implements IDisposable
 
-<div class="page">
-    <div class="sidebar">
+<div class="app-shell">
+    <aside class="sidebar-panel">
         <NavMenu />
-    </div>
+    </aside>
 
-    <main>
-        <div class="top-row px-4">
-            <a href="https://learn.microsoft.com/aspnet/core/" target="_blank">About</a>
-        </div>
+    <main class="main-panel">
+        <header class="topbar">
+            <div class="brand-area">
+                <span class="brand-tag">Normyx AI</span>
+                <span class="brand-sub">Compliance Copilot</span>
+            </div>
+            <div class="session-meta">
+                @if (Session.IsAuthenticated)
+                {
+                    <span>@Session.TenantName</span>
+                    <span>@Session.Email</span>
+                }
+                else
+                {
+                    <span>Not signed in</span>
+                }
+            </div>
+        </header>
 
-        <article class="content px-4">
+        <article class="content-panel">
             @Body
         </article>
     </main>
@@ -19,5 +35,19 @@
 <div id="blazor-error-ui" data-nosnippet>
     An unhandled error has occurred.
     <a href="." class="reload">Reload</a>
-    <span class="dismiss">🗙</span>
+    <span class="dismiss">x</span>
 </div>
+
+@code {
+    protected override void OnInitialized()
+    {
+        Session.Changed += OnSessionChanged;
+    }
+
+    private void OnSessionChanged() => InvokeAsync(StateHasChanged);
+
+    public void Dispose()
+    {
+        Session.Changed -= OnSessionChanged;
+    }
+}
