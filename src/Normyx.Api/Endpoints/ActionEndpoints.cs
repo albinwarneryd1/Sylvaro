@@ -1,3 +1,4 @@
+using System.ComponentModel.DataAnnotations;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
@@ -14,11 +15,13 @@ public static class ActionEndpoints
 {
     public static IEndpointRouteBuilder MapActionEndpoints(this IEndpointRouteBuilder app)
     {
-        var group = app.MapGroup("/actions").WithTags("Actions").RequireAuthorization();
+        var group = app.MapGroup("/actions").WithTags("Actions").RequireAuthorization().WithRequestValidation();
+        var writeRoles = $"{RoleNames.Admin},{RoleNames.ComplianceOfficer},{RoleNames.SecurityLead},{RoleNames.ProductOwner}";
 
         group.MapGet("/version/{versionId:guid}", ListActionsAsync);
         group.MapGet("/board/{versionId:guid}", ActionBoardAsync);
-        group.MapPut("/{actionId:guid}/status", UpdateStatusAsync);
+        group.MapGet("/version/{versionId:guid}/reviews", ListReviewsForVersionAsync);
+        group.MapPut("/{actionId:guid}/status", UpdateStatusAsync).RequireAuthorization(new AuthorizeAttribute { Roles = writeRoles });
         group.MapPost("/{actionId:guid}/approve", ApproveActionAsync)
             .RequireAuthorization(new AuthorizeAttribute { Roles = $"{RoleNames.Admin},{RoleNames.ComplianceOfficer}" });
         group.MapGet("/{actionId:guid}/reviews", ListReviewsAsync);
@@ -107,7 +110,7 @@ public static class ActionEndpoints
         return Results.NoContent();
     }
 
-    public record ApproveActionRequest(string Comment);
+    public record ApproveActionRequest([property: Required, StringLength(1000, MinimumLength = 2)] string Comment);
 
     private static async Task<IResult> ApproveActionAsync([FromRoute] Guid actionId, [FromBody] ApproveActionRequest request, NormyxDbContext dbContext, ICurrentUserContext currentUser)
     {
@@ -136,10 +139,15 @@ public static class ActionEndpoints
     private static async Task<IResult> ListReviewsAsync([FromRoute] Guid actionId, NormyxDbContext dbContext, ICurrentUserContext currentUser)
     {
         var tenantId = TenantContext.RequireTenantId(currentUser);
+        var actionInTenant = await dbContext.ActionItems
+            .AnyAsync(action => action.Id == actionId && action.AiSystemVersion.AiSystem.TenantId == tenantId);
+        if (!actionInTenant)
+        {
+            return Results.NotFound();
+        }
 
         var reviews = await dbContext.ActionReviews
-            .Where(x => x.ActionItemId == actionId && dbContext.ActionItems
-                .Any(action => action.Id == x.ActionItemId && action.AiSystemVersion.AiSystem.TenantId == tenantId))
+            .Where(x => x.ActionItemId == actionId)
             .OrderByDescending(x => x.ReviewedAt)
             .Select(x => new
             {
@@ -155,7 +163,36 @@ public static class ActionEndpoints
         return Results.Ok(reviews);
     }
 
-    public record ReviewActionRequest(ReviewDecision Decision, string Comment);
+    private static async Task<IResult> ListReviewsForVersionAsync([FromRoute] Guid versionId, NormyxDbContext dbContext, ICurrentUserContext currentUser)
+    {
+        var tenantId = TenantContext.RequireTenantId(currentUser);
+        var versionInTenant = await dbContext.AiSystemVersions
+            .AnyAsync(version => version.Id == versionId && version.AiSystem.TenantId == tenantId);
+
+        if (!versionInTenant)
+        {
+            return Results.NotFound();
+        }
+
+        var reviews = await dbContext.ActionReviews
+            .Where(review => review.ActionItem.AiSystemVersionId == versionId)
+            .OrderByDescending(review => review.ReviewedAt)
+            .Select(review => new
+            {
+                review.Id,
+                review.ActionItemId,
+                review.ReviewedByUserId,
+                Decision = review.Decision.ToString(),
+                review.Comment,
+                review.ReviewedAt
+            })
+            .Take(400)
+            .ToListAsync();
+
+        return Results.Ok(reviews);
+    }
+
+    public record ReviewActionRequest(ReviewDecision Decision, [property: Required, StringLength(1000, MinimumLength = 2)] string Comment);
 
     private static async Task<IResult> ReviewActionAsync(
         [FromRoute] Guid actionId,

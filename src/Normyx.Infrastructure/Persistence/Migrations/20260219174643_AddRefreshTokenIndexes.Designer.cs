@@ -2,6 +2,7 @@
 using System;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 using Normyx.Infrastructure.Persistence;
 using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
@@ -11,9 +12,11 @@ using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 namespace Normyx.Infrastructure.Persistence.Migrations
 {
     [DbContext(typeof(NormyxDbContext))]
-    partial class NormyxDbContextModelSnapshot : ModelSnapshot
+    [Migration("20260219174643_AddRefreshTokenIndexes")]
+    partial class AddRefreshTokenIndexes
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder
@@ -68,7 +71,7 @@ namespace Normyx.Infrastructure.Persistence.Migrations
 
                     b.HasKey("Id");
 
-                    b.HasIndex("AiSystemVersionId", "Status", "DueDate");
+                    b.HasIndex("AiSystemVersionId");
 
                     b.ToTable("ActionItems");
                 });
@@ -172,50 +175,6 @@ namespace Normyx.Infrastructure.Persistence.Migrations
                     b.ToTable("AiSystemVersions");
                 });
 
-            modelBuilder.Entity("Normyx.Domain.Entities.ApiToken", b =>
-                {
-                    b.Property<Guid>("Id")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("uuid");
-
-                    b.Property<DateTimeOffset>("CreatedAt")
-                        .HasColumnType("timestamp with time zone");
-
-                    b.Property<Guid>("CreatedByUserId")
-                        .HasColumnType("uuid");
-
-                    b.Property<string>("Name")
-                        .IsRequired()
-                        .HasColumnType("text");
-
-                    b.Property<DateTimeOffset?>("RevokedAt")
-                        .HasColumnType("timestamp with time zone");
-
-                    b.Property<string>("Scope")
-                        .IsRequired()
-                        .HasColumnType("text");
-
-                    b.Property<Guid>("TenantId")
-                        .HasColumnType("uuid");
-
-                    b.Property<string>("TokenHash")
-                        .IsRequired()
-                        .HasColumnType("text");
-
-                    b.Property<string>("TokenPrefix")
-                        .IsRequired()
-                        .HasColumnType("text");
-
-                    b.HasKey("Id");
-
-                    b.HasIndex("TokenHash")
-                        .IsUnique();
-
-                    b.HasIndex("TenantId", "Name");
-
-                    b.ToTable("ApiTokens");
-                });
-
             modelBuilder.Entity("Normyx.Domain.Entities.Assessment", b =>
                 {
                     b.Property<Guid>("Id")
@@ -249,7 +208,7 @@ namespace Normyx.Infrastructure.Persistence.Migrations
 
                     b.HasKey("Id");
 
-                    b.HasIndex("AiSystemVersionId", "RanAt");
+                    b.HasIndex("AiSystemVersionId");
 
                     b.ToTable("Assessments");
                 });
@@ -299,10 +258,6 @@ namespace Normyx.Infrastructure.Persistence.Migrations
                     b.HasKey("Id");
 
                     b.HasIndex("TenantId", "Timestamp");
-
-                    b.HasIndex("TenantId", "ActionType", "Timestamp");
-
-                    b.HasIndex("TenantId", "ActorUserId", "Timestamp");
 
                     b.ToTable("AuditLogs");
                 });
@@ -686,8 +641,6 @@ namespace Normyx.Infrastructure.Persistence.Migrations
 
                     b.HasKey("Id");
 
-                    b.HasIndex("TenantId", "CreatedAt");
-
                     b.ToTable("ExportArtifacts");
                 });
 
@@ -725,7 +678,7 @@ namespace Normyx.Infrastructure.Persistence.Migrations
 
                     b.HasKey("Id");
 
-                    b.HasIndex("AssessmentId", "Severity");
+                    b.HasIndex("AssessmentId");
 
                     b.ToTable("Findings");
                 });
@@ -843,10 +796,6 @@ namespace Normyx.Infrastructure.Persistence.Migrations
                     b.Property<DateTimeOffset>("CreatedAt")
                         .HasColumnType("timestamp with time zone");
 
-                    b.Property<string>("CreatedIp")
-                        .IsRequired()
-                        .HasColumnType("text");
-
                     b.Property<DateTimeOffset>("ExpiresAt")
                         .HasColumnType("timestamp with time zone");
 
@@ -854,10 +803,6 @@ namespace Normyx.Infrastructure.Persistence.Migrations
                         .HasColumnType("timestamp with time zone");
 
                     b.Property<string>("Token")
-                        .IsRequired()
-                        .HasColumnType("text");
-
-                    b.Property<string>("UserAgent")
                         .IsRequired()
                         .HasColumnType("text");
 
@@ -1074,17 +1019,6 @@ namespace Normyx.Infrastructure.Persistence.Migrations
                         .IsRequired();
 
                     b.Navigation("AiSystemVersion");
-                });
-
-            modelBuilder.Entity("Normyx.Domain.Entities.ActionReview", b =>
-                {
-                    b.HasOne("Normyx.Domain.Entities.ActionItem", "ActionItem")
-                        .WithMany()
-                        .HasForeignKey("ActionItemId")
-                        .OnDelete(DeleteBehavior.Cascade)
-                        .IsRequired();
-
-                    b.Navigation("ActionItem");
                 });
 
             modelBuilder.Entity("Normyx.Domain.Entities.AiSystem", b =>

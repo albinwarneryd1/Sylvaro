@@ -1,5 +1,6 @@
 using System.Text;
 using System.Text.Json;
+using System.ComponentModel.DataAnnotations;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
@@ -15,7 +16,7 @@ public static class ExportEndpoints
 {
     public static IEndpointRouteBuilder MapExportEndpoints(this IEndpointRouteBuilder app)
     {
-        var group = app.MapGroup("/exports").WithTags("Exports").RequireAuthorization();
+        var group = app.MapGroup("/exports").WithTags("Exports").RequireAuthorization().WithRequestValidation();
 
         group.MapPost("/versions/{versionId:guid}/generate", GenerateExportAsync)
             .RequireAuthorization(new AuthorizeAttribute { Roles = $"{RoleNames.Admin},{RoleNames.ComplianceOfficer}" });
@@ -25,7 +26,10 @@ public static class ExportEndpoints
         return app;
     }
 
-    public record GenerateExportRequest(string ExportType, string Format = "pdf", bool SendWebhook = false);
+    public record GenerateExportRequest(
+        [property: Required, StringLength(80, MinimumLength = 2)] string ExportType,
+        [property: Required, RegularExpression("^(pdf|json)$")] string Format = "pdf",
+        bool SendWebhook = false);
 
     private static async Task<IResult> GenerateExportAsync(
         [FromRoute] Guid versionId,

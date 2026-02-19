@@ -1,8 +1,11 @@
 using System.Text;
+using System.Threading.RateLimiting;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.IdentityModel.Tokens;
 using Microsoft.OpenApi.Models;
+using Normyx.Api.Contracts.Errors;
+using Normyx.Api.Middleware;
 using Normyx.Api.Endpoints;
 using Normyx.Application.Abstractions;
 using Normyx.Infrastructure.Audit;
@@ -36,6 +39,7 @@ builder.Services.AddTransient<OpenAiCompatibleJsonCompletionProvider>();
 builder.Services.AddSingleton<LocalJsonCompletionProvider>();
 builder.Services.AddTransient<IAiJsonCompletionProvider, SwitchingJsonCompletionProvider>();
 builder.Services.AddSingleton<Normyx.Infrastructure.Compliance.PolicyEngine>();
+builder.Services.AddSingleton<IAssessmentExecutionGuard, Normyx.Infrastructure.Compliance.InMemoryAssessmentExecutionGuard>();
 builder.Services.AddScoped<IAiDraftService, Normyx.Infrastructure.Compliance.AiDraftService>();
 builder.Services.AddScoped<IAssessmentService, Normyx.Infrastructure.Compliance.AssessmentService>();
 builder.Services.AddScoped<IExportService, Normyx.Infrastructure.Exports.PdfExportService>();
@@ -55,11 +59,72 @@ builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
             ValidIssuer = jwt.Issuer,
             ValidAudience = jwt.Audience,
             IssuerSigningKey = signingKey,
-            ClockSkew = TimeSpan.FromSeconds(30)
+            ClockSkew = TimeSpan.Zero
+        };
+
+        options.Events = new JwtBearerEvents
+        {
+            OnChallenge = async context =>
+            {
+                context.HandleResponse();
+                var httpContext = context.HttpContext;
+                var correlationId = httpContext.Items.TryGetValue(CorrelationIdMiddleware.HttpContextItemKey, out var value)
+                    ? value?.ToString() ?? httpContext.TraceIdentifier
+                    : httpContext.TraceIdentifier;
+
+                httpContext.Response.StatusCode = StatusCodes.Status401Unauthorized;
+                httpContext.Response.ContentType = "application/json";
+                var payload = new ApiErrorEnvelope(correlationId, new ApiErrorDetail("unauthorized", "Authentication is required."));
+                await httpContext.Response.WriteAsJsonAsync(payload);
+            },
+            OnForbidden = async context =>
+            {
+                var httpContext = context.HttpContext;
+                var correlationId = httpContext.Items.TryGetValue(CorrelationIdMiddleware.HttpContextItemKey, out var value)
+                    ? value?.ToString() ?? httpContext.TraceIdentifier
+                    : httpContext.TraceIdentifier;
+
+                httpContext.Response.StatusCode = StatusCodes.Status403Forbidden;
+                httpContext.Response.ContentType = "application/json";
+                var payload = new ApiErrorEnvelope(correlationId, new ApiErrorDetail("forbidden", "Insufficient permissions."));
+                await httpContext.Response.WriteAsJsonAsync(payload);
+            }
         };
     });
 
 builder.Services.AddAuthorization();
+builder.Services.AddProblemDetails();
+builder.Services.AddRateLimiter(options =>
+{
+    options.RejectionStatusCode = StatusCodes.Status429TooManyRequests;
+    options.GlobalLimiter = PartitionedRateLimiter.Create<HttpContext, string>(context =>
+    {
+        var key = context.Connection.RemoteIpAddress?.ToString() ?? "unknown";
+        return RateLimitPartition.GetFixedWindowLimiter(
+            key,
+            _ => new FixedWindowRateLimiterOptions
+            {
+                PermitLimit = 200,
+                Window = TimeSpan.FromMinutes(1),
+                QueueProcessingOrder = QueueProcessingOrder.OldestFirst,
+                QueueLimit = 0
+            });
+    });
+
+    options.AddPolicy("auth", context =>
+    {
+        var key = context.Connection.RemoteIpAddress?.ToString() ?? "unknown";
+        return RateLimitPartition.GetFixedWindowLimiter(
+            $"auth:{key}",
+            _ => new FixedWindowRateLimiterOptions
+            {
+                PermitLimit = 20,
+                Window = TimeSpan.FromMinutes(1),
+                QueueProcessingOrder = QueueProcessingOrder.OldestFirst,
+                QueueLimit = 0
+            });
+    });
+});
 
 builder.Services.AddOpenApi();
 builder.Services.AddSwaggerGen(c =>
@@ -82,6 +147,11 @@ builder.Services.AddSwaggerGen(c =>
 
 var app = builder.Build();
 
+app.UseMiddleware<CorrelationIdMiddleware>();
+app.UseMiddleware<GlobalExceptionMiddleware>();
+app.UseMiddleware<SecurityHeadersMiddleware>();
+app.UseRateLimiter();
+
 if (app.Environment.IsDevelopment())
 {
     app.MapOpenApi();
@@ -99,7 +169,9 @@ using (var scope = app.Services.CreateScope())
 }
 
 app.UseAuthentication();
+app.UseMiddleware<TenantIsolationMiddleware>();
 app.UseAuthorization();
+app.UseMiddleware<ApiStatusCodeEnvelopeMiddleware>();
 app.UseMiddleware<AuditMiddleware>();
 
 app.MapGet("/health/live", () => Results.Ok(new { status = "ok" }));
@@ -124,6 +196,7 @@ app.MapFindingEndpoints();
 app.MapActionEndpoints();
 app.MapExportEndpoints();
 app.MapDashboardEndpoints();
+app.MapSecurityEndpoints();
 
 app.Run();
 

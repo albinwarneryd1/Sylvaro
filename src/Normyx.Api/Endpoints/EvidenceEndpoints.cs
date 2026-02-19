@@ -10,7 +10,7 @@ public static class EvidenceEndpoints
 {
     public static IEndpointRouteBuilder MapEvidenceEndpoints(this IEndpointRouteBuilder app)
     {
-        var group = app.MapGroup("/versions/{versionId:guid}/evidence").WithTags("Evidence").RequireAuthorization();
+        var group = app.MapGroup("/versions/{versionId:guid}/evidence").WithTags("Evidence").RequireAuthorization().WithRequestValidation();
 
         group.MapGet("/map", GetEvidenceMapAsync);
         group.MapGet("/gaps", GetEvidenceGapsAsync);

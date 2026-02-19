@@ -48,11 +48,26 @@ public class RefreshToken
     public Guid Id { get; set; }
     public Guid UserId { get; set; }
     public string Token { get; set; } = string.Empty;
+    public string CreatedIp { get; set; } = string.Empty;
+    public string UserAgent { get; set; } = string.Empty;
     public DateTimeOffset ExpiresAt { get; set; }
     public DateTimeOffset? RevokedAt { get; set; }
     public DateTimeOffset CreatedAt { get; set; } = DateTimeOffset.UtcNow;
 
     public User User { get; set; } = null!;
+}
+
+public class ApiToken
+{
+    public Guid Id { get; set; }
+    public Guid TenantId { get; set; }
+    public Guid CreatedByUserId { get; set; }
+    public string Name { get; set; } = string.Empty;
+    public string Scope { get; set; } = string.Empty;
+    public string TokenHash { get; set; } = string.Empty;
+    public string TokenPrefix { get; set; } = string.Empty;
+    public DateTimeOffset CreatedAt { get; set; } = DateTimeOffset.UtcNow;
+    public DateTimeOffset? RevokedAt { get; set; }
 }
 
 public class AiSystem
@@ -313,6 +328,8 @@ public class ActionReview
     public ReviewDecision Decision { get; set; }
     public string Comment { get; set; } = string.Empty;
     public DateTimeOffset ReviewedAt { get; set; } = DateTimeOffset.UtcNow;
+
+    public ActionItem ActionItem { get; set; } = null!;
 }
 
 public class AuditLog

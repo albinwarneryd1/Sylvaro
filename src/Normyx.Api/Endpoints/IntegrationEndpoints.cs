@@ -1,3 +1,4 @@
+using System.ComponentModel.DataAnnotations;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
@@ -14,7 +15,7 @@ public static class IntegrationEndpoints
     public static IEndpointRouteBuilder MapIntegrationEndpoints(this IEndpointRouteBuilder app)
     {
         var group = app.MapGroup("/integrations").WithTags("Integrations").RequireAuthorization(
-            new AuthorizeAttribute { Roles = RoleNames.Admin });
+            new AuthorizeAttribute { Roles = RoleNames.Admin }).WithRequestValidation();
 
         group.MapGet("/webhooks", ListWebhooksAsync);
         group.MapPut("/webhooks/{provider}", UpsertWebhookAsync);
@@ -44,7 +45,10 @@ public static class IntegrationEndpoints
         return Results.Ok(integrations);
     }
 
-    private record UpsertWebhookRequest(string WebhookUrl, string? AuthHeader, bool IsEnabled);
+    private record UpsertWebhookRequest(
+        [property: Required, Url, StringLength(1000)] string WebhookUrl,
+        [property: StringLength(2000)] string? AuthHeader,
+        bool IsEnabled);
 
     private static async Task<IResult> UpsertWebhookAsync(
         [FromRoute] string provider,

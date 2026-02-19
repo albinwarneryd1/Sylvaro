@@ -1,7 +1,10 @@
+using System.ComponentModel.DataAnnotations;
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using Normyx.Api.Utilities;
 using Normyx.Application.Abstractions;
+using Normyx.Application.Security;
 using Normyx.Domain.Entities;
 using Normyx.Infrastructure.Persistence;
 
@@ -11,17 +14,18 @@ public static class InventoryEndpoints
 {
     public static IEndpointRouteBuilder MapInventoryEndpoints(this IEndpointRouteBuilder app)
     {
-        var group = app.MapGroup("/versions/{versionId:guid}/inventory").WithTags("Inventory").RequireAuthorization();
+        var group = app.MapGroup("/versions/{versionId:guid}/inventory").WithTags("Inventory").RequireAuthorization().WithRequestValidation();
+        var writeRoles = $"{RoleNames.Admin},{RoleNames.ComplianceOfficer},{RoleNames.SecurityLead},{RoleNames.ProductOwner}";
 
         group.MapGet("", GetInventoryAsync);
 
-        group.MapPost("/data-items", AddDataItemAsync);
-        group.MapPut("/data-items/{itemId:guid}", UpdateDataItemAsync);
-        group.MapDelete("/data-items/{itemId:guid}", DeleteDataItemAsync);
+        group.MapPost("/data-items", AddDataItemAsync).RequireAuthorization(new AuthorizeAttribute { Roles = writeRoles });
+        group.MapPut("/data-items/{itemId:guid}", UpdateDataItemAsync).RequireAuthorization(new AuthorizeAttribute { Roles = writeRoles });
+        group.MapDelete("/data-items/{itemId:guid}", DeleteDataItemAsync).RequireAuthorization(new AuthorizeAttribute { Roles = writeRoles });
 
-        group.MapPost("/vendors", AddVendorAsync);
-        group.MapPut("/vendors/{vendorId:guid}", UpdateVendorAsync);
-        group.MapDelete("/vendors/{vendorId:guid}", DeleteVendorAsync);
+        group.MapPost("/vendors", AddVendorAsync).RequireAuthorization(new AuthorizeAttribute { Roles = writeRoles });
+        group.MapPut("/vendors/{vendorId:guid}", UpdateVendorAsync).RequireAuthorization(new AuthorizeAttribute { Roles = writeRoles });
+        group.MapDelete("/vendors/{vendorId:guid}", DeleteVendorAsync).RequireAuthorization(new AuthorizeAttribute { Roles = writeRoles });
 
         return app;
     }
@@ -43,7 +47,15 @@ public static class InventoryEndpoints
         return Results.Ok(new { dataItems, vendors });
     }
 
-    private record UpsertDataItemRequest(string DataCategory, bool ContainsPersonalData, bool SpecialCategory, string Source, string LawfulBasis, int RetentionDays, bool TransferOutsideEu, string Notes);
+    private record UpsertDataItemRequest(
+        [property: Required, StringLength(120, MinimumLength = 2)] string DataCategory,
+        bool ContainsPersonalData,
+        bool SpecialCategory,
+        [property: Required, StringLength(120, MinimumLength = 2)] string Source,
+        [property: Required, StringLength(120, MinimumLength = 2)] string LawfulBasis,
+        [property: Range(1, 36500)] int RetentionDays,
+        bool TransferOutsideEu,
+        [property: StringLength(1000)] string Notes);
 
     private static async Task<IResult> AddDataItemAsync([FromRoute] Guid versionId, [FromBody] UpsertDataItemRequest request, NormyxDbContext dbContext, ICurrentUserContext currentUser)
     {
@@ -120,7 +132,13 @@ public static class InventoryEndpoints
         return Results.NoContent();
     }
 
-    private record UpsertVendorRequest(string Name, string ServiceType, string Region, string[] SubProcessors, bool DpaInPlace, string Notes);
+    private record UpsertVendorRequest(
+        [property: Required, StringLength(180, MinimumLength = 2)] string Name,
+        [property: Required, StringLength(120, MinimumLength = 2)] string ServiceType,
+        [property: Required, StringLength(120, MinimumLength = 2)] string Region,
+        string[] SubProcessors,
+        bool DpaInPlace,
+        [property: StringLength(1000)] string Notes);
 
     private static async Task<IResult> AddVendorAsync([FromRoute] Guid versionId, [FromBody] UpsertVendorRequest request, NormyxDbContext dbContext, ICurrentUserContext currentUser)
     {

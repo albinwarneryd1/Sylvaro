@@ -1,13 +1,24 @@
+@inject Normyx.Web.Services.AuthSession Session
+
 <nav class="menu-root">
     <div class="menu-title">Operations</div>
-
-    <NavLink class="menu-link" href="" Match="NavLinkMatch.All">Executive Overview</NavLink>
-    <NavLink class="menu-link" href="ai-systems">AI System Registry</NavLink>
-    <NavLink class="menu-link" href="tenant-settings">Tenant Governance</NavLink>
-    <NavLink class="menu-link" href="audit-log">Audit Records</NavLink>
-    <NavLink class="menu-link" href="security-center">Security Center</NavLink>
+    @if (Session.IsAuthenticated)
+    {
+        <NavLink class="menu-link" href="" Match="NavLinkMatch.All">Executive Overview</NavLink>
+        <NavLink class="menu-link" href="ai-systems">AI System Registry</NavLink>
+        <NavLink class="menu-link" href="tenant-settings">Tenant Governance</NavLink>
+        <NavLink class="menu-link" href="audit-log">Audit Records</NavLink>
+        <NavLink class="menu-link" href="security-center">Security Center</NavLink>
+    }
 
     <div class="menu-title auth-title">Access Control</div>
-    <NavLink class="menu-link" href="login">Sign In</NavLink>
-    <NavLink class="menu-link" href="register">Register Tenant</NavLink>
+    @if (Session.IsAuthenticated)
+    {
+        <NavLink class="menu-link" href="login">Switch Account</NavLink>
+    }
+    else
+    {
+        <NavLink class="menu-link" href="login">Sign In</NavLink>
+        <NavLink class="menu-link" href="register">Register Tenant</NavLink>
+    }
 </nav>

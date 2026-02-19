@@ -10,7 +10,7 @@ Normyx AI is a compliance operations platform for AI systems with deterministic 
 - `policy-packs/` versioned compliance-as-code JSON packs.
 - `prompts/` versioned prompt templates for structured JSON generation.
 - `reference-notes/` built-in compliance reference notes used in RAG.
-- `tests/Normyx.Tests` integration tests for multi-tenant isolation, tenant RBAC role listing, and action review workflow using Testcontainers.
+- `tests/Normyx.Tests` integration and unit tests for tenant isolation, RBAC enforcement, auth hardening, session lifecycle, API token lifecycle, action review workflows, and policy engine cache behavior.
 
 ## One command start
 
@@ -80,7 +80,13 @@ dotnet run --project src/Normyx.Web/Normyx.Web.csproj
 - Exports: `/exports/versions/{versionId}/generate`, `/exports/versions/{versionId}`, `/exports/{artifactId}/download`
 - Integrations: `/integrations/webhooks`, `/integrations/webhooks/{provider}`
 - Tenant policy packs: `/tenants/policy-packs`, `/tenants/policy-packs/{policyPackId}/enabled`
-- Audit: `/audit`
+- Security: `/security/sessions`, `/security/sessions/revoke-others`, `/security/api-tokens`
+- Audit: `/audit`, `/audit/export`
+
+## Troubleshooting
+
+- If `docker compose up --build` fails with `Cannot connect to the Docker daemon`, start Docker Desktop and wait until it shows as running, then rerun compose.
+- If the UI shows `Authentication required` after refresh, sign in again once to repopulate session storage. The app now auto-recovers access tokens and redirects to login only when refresh is no longer recoverable.
 
 ## Compliance-as-code and AI schemas
 

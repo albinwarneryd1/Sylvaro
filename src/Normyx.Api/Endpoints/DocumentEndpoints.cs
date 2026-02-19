@@ -1,7 +1,10 @@
+using System.ComponentModel.DataAnnotations;
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using Normyx.Api.Utilities;
 using Normyx.Application.Abstractions;
+using Normyx.Application.Security;
 using Normyx.Domain.Entities;
 using Normyx.Infrastructure.Persistence;
 
@@ -11,14 +14,15 @@ public static class DocumentEndpoints
 {
     public static IEndpointRouteBuilder MapDocumentEndpoints(this IEndpointRouteBuilder app)
     {
-        var group = app.MapGroup("/documents").WithTags("Documents").RequireAuthorization();
+        var group = app.MapGroup("/documents").WithTags("Documents").RequireAuthorization().WithRequestValidation();
+        var writeRoles = $"{RoleNames.Admin},{RoleNames.ComplianceOfficer},{RoleNames.SecurityLead},{RoleNames.ProductOwner}";
 
         group.MapGet("", ListDocumentsAsync);
         group.MapGet("/{documentId:guid}/excerpts", ListExcerptsAsync);
-        group.MapPost("/upload", UploadDocumentAsync).DisableAntiforgery();
+        group.MapPost("/upload", UploadDocumentAsync).RequireAuthorization(new AuthorizeAttribute { Roles = writeRoles }).DisableAntiforgery();
         group.MapGet("/{documentId:guid}/download", DownloadDocumentAsync);
-        group.MapPost("/{documentId:guid}/excerpts", CreateExcerptAsync);
-        group.MapPost("/evidence-links", CreateEvidenceLinkAsync);
+        group.MapPost("/{documentId:guid}/excerpts", CreateExcerptAsync).RequireAuthorization(new AuthorizeAttribute { Roles = writeRoles });
+        group.MapPost("/evidence-links", CreateEvidenceLinkAsync).RequireAuthorization(new AuthorizeAttribute { Roles = writeRoles });
 
         return app;
     }
@@ -168,7 +172,10 @@ public static class DocumentEndpoints
         return Results.File(stream, contentType == "application/octet-stream" ? doc.MimeType : contentType, doc.FileName);
     }
 
-    private record CreateExcerptRequest(string Title, string Text, string PageRef);
+    private record CreateExcerptRequest(
+        [property: Required, StringLength(200, MinimumLength = 2)] string Title,
+        [property: Required, StringLength(8000, MinimumLength = 10)] string Text,
+        [property: Required, StringLength(80, MinimumLength = 1)] string PageRef);
 
     private static async Task<IResult> CreateExcerptAsync(
         [FromRoute] Guid documentId,
@@ -211,7 +218,10 @@ public static class DocumentEndpoints
         return Results.Created($"/documents/{documentId}/excerpts/{excerpt.Id}", excerpt);
     }
 
-    private record CreateEvidenceLinkRequest(string TargetType, Guid TargetId, Guid EvidenceExcerptId);
+    private record CreateEvidenceLinkRequest(
+        [property: Required, StringLength(80, MinimumLength = 2)] string TargetType,
+        Guid TargetId,
+        Guid EvidenceExcerptId);
 
     private static async Task<IResult> CreateEvidenceLinkAsync(
         [FromBody] CreateEvidenceLinkRequest request,

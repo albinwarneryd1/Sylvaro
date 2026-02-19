@@ -10,6 +10,7 @@ public class NormyxDbContext(DbContextOptions<NormyxDbContext> options) : DbCont
     public DbSet<Role> Roles => Set<Role>();
     public DbSet<UserRole> UserRoles => Set<UserRole>();
     public DbSet<RefreshToken> RefreshTokens => Set<RefreshToken>();
+    public DbSet<ApiToken> ApiTokens => Set<ApiToken>();
     public DbSet<AiSystem> AiSystems => Set<AiSystem>();
     public DbSet<AiSystemVersion> AiSystemVersions => Set<AiSystemVersion>();
     public DbSet<Component> Components => Set<Component>();
@@ -45,17 +46,27 @@ public class NormyxDbContext(DbContextOptions<NormyxDbContext> options) : DbCont
 
         modelBuilder.Entity<User>().HasIndex(x => new { x.TenantId, x.Email }).IsUnique();
         modelBuilder.Entity<Role>().HasIndex(x => x.Name).IsUnique();
+        modelBuilder.Entity<RefreshToken>().HasIndex(x => x.Token).IsUnique();
+        modelBuilder.Entity<RefreshToken>().HasIndex(x => new { x.UserId, x.ExpiresAt });
+        modelBuilder.Entity<ApiToken>().HasIndex(x => new { x.TenantId, x.Name });
+        modelBuilder.Entity<ApiToken>().HasIndex(x => x.TokenHash).IsUnique();
         modelBuilder.Entity<AiSystem>().HasIndex(x => new { x.TenantId, x.Name });
         modelBuilder.Entity<AiSystemVersion>().HasIndex(x => new { x.AiSystemId, x.VersionNumber }).IsUnique();
 
         modelBuilder.Entity<PolicyPack>().HasIndex(x => new { x.Name, x.Version, x.Scope }).IsUnique();
         modelBuilder.Entity<PolicyRule>().HasIndex(x => new { x.PolicyPackId, x.RuleKey }).IsUnique();
         modelBuilder.Entity<Control>().HasIndex(x => x.ControlKey).IsUnique();
+        modelBuilder.Entity<Assessment>().HasIndex(x => new { x.AiSystemVersionId, x.RanAt });
+        modelBuilder.Entity<Finding>().HasIndex(x => new { x.AssessmentId, x.Severity });
+        modelBuilder.Entity<ActionItem>().HasIndex(x => new { x.AiSystemVersionId, x.Status, x.DueDate });
+        modelBuilder.Entity<ExportArtifact>().HasIndex(x => new { x.TenantId, x.CreatedAt });
 
         modelBuilder.Entity<AiSystem>().HasOne<User>().WithMany().HasForeignKey(x => x.OwnerUserId).OnDelete(DeleteBehavior.Restrict);
         modelBuilder.Entity<AiSystemVersion>().HasOne<User>().WithMany().HasForeignKey(x => x.CreatedByUserId).OnDelete(DeleteBehavior.Restrict);
 
         modelBuilder.Entity<AuditLog>().HasIndex(x => new { x.TenantId, x.Timestamp });
+        modelBuilder.Entity<AuditLog>().HasIndex(x => new { x.TenantId, x.ActorUserId, x.Timestamp });
+        modelBuilder.Entity<AuditLog>().HasIndex(x => new { x.TenantId, x.ActionType, x.Timestamp });
         modelBuilder.Entity<ActionReview>().HasIndex(x => new { x.ActionItemId, x.ReviewedAt });
         modelBuilder.Entity<TenantIntegration>().HasIndex(x => new { x.TenantId, x.Provider }).IsUnique();
         modelBuilder.Entity<TenantPolicyPackSelection>().HasIndex(x => new { x.TenantId, x.PolicyPackId }).IsUnique();

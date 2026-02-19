@@ -10,7 +10,7 @@ public static class FindingEndpoints
 {
     public static IEndpointRouteBuilder MapFindingEndpoints(this IEndpointRouteBuilder app)
     {
-        var group = app.MapGroup("/findings").WithTags("Findings").RequireAuthorization();
+        var group = app.MapGroup("/findings").WithTags("Findings").RequireAuthorization().WithRequestValidation();
 
         group.MapGet("/assessment/{assessmentId:guid}", ListFindingsForAssessmentAsync);
         group.MapGet("/{findingId:guid}", GetFindingAsync);

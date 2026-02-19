@@ -11,7 +11,7 @@ public static class DashboardEndpoints
 {
     public static IEndpointRouteBuilder MapDashboardEndpoints(this IEndpointRouteBuilder app)
     {
-        var group = app.MapGroup("/dashboard").WithTags("Dashboard").RequireAuthorization();
+        var group = app.MapGroup("/dashboard").WithTags("Dashboard").RequireAuthorization().WithRequestValidation();
 
         group.MapGet("/tenant", TenantDashboardAsync);
         group.MapGet("/system/{systemId:guid}", SystemDashboardAsync);

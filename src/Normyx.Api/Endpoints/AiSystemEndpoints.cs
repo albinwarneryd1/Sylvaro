@@ -1,8 +1,10 @@
+using System.ComponentModel.DataAnnotations;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using Normyx.Api.Utilities;
 using Normyx.Application.Abstractions;
+using Normyx.Application.Security;
 using Normyx.Domain.Entities;
 using Normyx.Domain.Enums;
 using Normyx.Infrastructure.Persistence;
@@ -13,16 +15,17 @@ public static class AiSystemEndpoints
 {
     public static IEndpointRouteBuilder MapAiSystemEndpoints(this IEndpointRouteBuilder app)
     {
-        var group = app.MapGroup("/aisystems").WithTags("AI Systems").RequireAuthorization();
+        var group = app.MapGroup("/aisystems").WithTags("AI Systems").RequireAuthorization().WithRequestValidation();
+        var writeRoles = $"{RoleNames.Admin},{RoleNames.ComplianceOfficer},{RoleNames.SecurityLead},{RoleNames.ProductOwner}";
 
         group.MapGet("", ListSystemsAsync);
-        group.MapPost("", CreateSystemAsync);
+        group.MapPost("", CreateSystemAsync).RequireAuthorization(new AuthorizeAttribute { Roles = writeRoles });
         group.MapGet("/{systemId:guid}", GetSystemAsync);
-        group.MapPut("/{systemId:guid}", UpdateSystemAsync);
-        group.MapDelete("/{systemId:guid}", ArchiveSystemAsync);
+        group.MapPut("/{systemId:guid}", UpdateSystemAsync).RequireAuthorization(new AuthorizeAttribute { Roles = writeRoles });
+        group.MapDelete("/{systemId:guid}", ArchiveSystemAsync).RequireAuthorization(new AuthorizeAttribute { Roles = writeRoles });
 
         group.MapGet("/{systemId:guid}/versions", ListVersionsAsync);
-        group.MapPost("/{systemId:guid}/versions", CreateVersionAsync);
+        group.MapPost("/{systemId:guid}/versions", CreateVersionAsync).RequireAuthorization(new AuthorizeAttribute { Roles = writeRoles });
 
         return app;
     }
@@ -49,7 +52,10 @@ public static class AiSystemEndpoints
         return Results.Ok(systems);
     }
 
-    private record CreateAiSystemRequest(string Name, string Description, Guid? OwnerUserId);
+    private record CreateAiSystemRequest(
+        [property: Required, StringLength(180, MinimumLength = 2)] string Name,
+        [property: StringLength(2000)] string Description,
+        Guid? OwnerUserId);
 
     private static async Task<IResult> CreateSystemAsync(
         [FromBody] CreateAiSystemRequest request,
@@ -110,7 +116,11 @@ public static class AiSystemEndpoints
         return system is null ? Results.NotFound() : Results.Ok(system);
     }
 
-    private record UpdateAiSystemRequest(string Name, string Description, AiSystemStatus Status, Guid OwnerUserId);
+    private record UpdateAiSystemRequest(
+        [property: Required, StringLength(180, MinimumLength = 2)] string Name,
+        [property: StringLength(2000)] string Description,
+        AiSystemStatus Status,
+        Guid OwnerUserId);
 
     private static async Task<IResult> UpdateSystemAsync(
         [FromRoute] Guid systemId,
@@ -166,7 +176,8 @@ public static class AiSystemEndpoints
         return Results.Ok(versions);
     }
 
-    private record CreateVersionRequest(string ChangeSummary);
+    private record CreateVersionRequest(
+        [property: Required, StringLength(500, MinimumLength = 2)] string ChangeSummary);
 
     private static async Task<IResult> CreateVersionAsync(
         [FromRoute] Guid systemId,

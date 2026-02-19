@@ -1,8 +1,10 @@
 using System.Text.Json;
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using Normyx.Api.Utilities;
 using Normyx.Application.Abstractions;
+using Normyx.Application.Security;
 using Normyx.Infrastructure.Persistence;
 
 namespace Normyx.Api.Endpoints;
@@ -11,9 +13,10 @@ public static class AssessmentEndpoints
 {
     public static IEndpointRouteBuilder MapAssessmentEndpoints(this IEndpointRouteBuilder app)
     {
-        var group = app.MapGroup("/versions/{versionId:guid}/assessments").WithTags("Assessments").RequireAuthorization();
+        var group = app.MapGroup("/versions/{versionId:guid}/assessments").WithTags("Assessments").RequireAuthorization().WithRequestValidation();
+        var writeRoles = $"{RoleNames.Admin},{RoleNames.ComplianceOfficer},{RoleNames.SecurityLead},{RoleNames.ProductOwner}";
 
-        group.MapPost("/run", RunAssessmentAsync);
+        group.MapPost("/run", RunAssessmentAsync).RequireAuthorization(new AuthorizeAttribute { Roles = writeRoles });
         group.MapGet("", ListAssessmentsAsync);
         group.MapGet("/{assessmentId:guid}", GetAssessmentAsync);
         group.MapGet("/diff/{otherVersionId:guid}", CompareVersionAssessmentsAsync);

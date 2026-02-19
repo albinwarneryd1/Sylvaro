@@ -11,10 +11,13 @@ namespace Normyx.Infrastructure.Compliance;
 public class AssessmentService(
     NormyxDbContext dbContext,
     IAiDraftService aiDraftService,
-    PolicyEngine policyEngine) : IAssessmentService
+    PolicyEngine policyEngine,
+    IAssessmentExecutionGuard executionGuard) : IAssessmentService
 {
     public async Task<AssessmentRunResult> RunAssessmentAsync(Guid tenantId, Guid versionId, Guid ranByUserId, CancellationToken cancellationToken = default)
     {
+        await using var executionHandle = await executionGuard.AcquireAsync(tenantId, versionId, cancellationToken);
+
         var version = await dbContext.AiSystemVersions
             .Include(x => x.AiSystem)
             .FirstOrDefaultAsync(x => x.Id == versionId && x.AiSystem.TenantId == tenantId, cancellationToken);

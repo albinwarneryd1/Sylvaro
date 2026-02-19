@@ -1,3 +1,4 @@
+using System.ComponentModel.DataAnnotations;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.Mvc;
@@ -14,7 +15,7 @@ public static class TenantEndpoints
 {
     public static IEndpointRouteBuilder MapTenantEndpoints(this IEndpointRouteBuilder app)
     {
-        var group = app.MapGroup("/tenants").WithTags("Tenants").RequireAuthorization();
+        var group = app.MapGroup("/tenants").WithTags("Tenants").RequireAuthorization().WithRequestValidation();
 
         group.MapGet("/me", GetCurrentTenantAsync);
         group.MapPut("/me", UpdateCurrentTenantAsync).RequireAuthorization(new AuthorizeAttribute { Roles = RoleNames.Admin });
@@ -40,7 +41,7 @@ public static class TenantEndpoints
         return tenant is null ? Results.NotFound() : Results.Ok(tenant);
     }
 
-    private record UpdateTenantRequest(string Name);
+    private record UpdateTenantRequest([property: Required, StringLength(120, MinimumLength = 2)] string Name);
 
     private static async Task<IResult> UpdateCurrentTenantAsync([FromBody] UpdateTenantRequest request, NormyxDbContext dbContext, ICurrentUserContext currentUser)
     {
@@ -99,7 +100,11 @@ public static class TenantEndpoints
         return Results.Ok(result);
     }
 
-    private record CreateUserRequest(string Email, string DisplayName, string Password, string[] Roles);
+    private record CreateUserRequest(
+        [property: Required, EmailAddress, StringLength(255)] string Email,
+        [property: Required, StringLength(120, MinimumLength = 2)] string DisplayName,
+        [property: Required, StringLength(128, MinimumLength = 10)] string Password,
+        [property: MinLength(1)] string[] Roles);
 
     private static async Task<IResult> CreateUserAsync(
         [FromBody] CreateUserRequest request,
@@ -139,7 +144,7 @@ public static class TenantEndpoints
         return Results.Created($"/tenants/users/{user.Id}", new { user.Id, user.Email, user.DisplayName });
     }
 
-    private record UpdateRolesRequest(string[] Roles);
+    private record UpdateRolesRequest([property: MinLength(1)] string[] Roles);
 
     private static async Task<IResult> ListPolicyPacksAsync(NormyxDbContext dbContext, ICurrentUserContext currentUser)
     {
