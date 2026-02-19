@@ -19,7 +19,8 @@
                 {
                     <span class="session-pill">@Session.TenantName</span>
                     <span class="session-pill">@Session.Email</span>
-                    <span class="session-pill">Last Login: Active Session</span>
+                    <span class="session-pill">Last Login: @FormatTimestamp(Session.LastAuthenticatedAt)</span>
+                    <span class="session-pill">Session Expires: @FormatTimestamp(Session.RefreshTokenExpiresAt)</span>
                 }
                 else
                 {
@@ -72,6 +73,9 @@
     }
 
     private void OnSessionChanged() => InvokeAsync(StateHasChanged);
+
+    private static string FormatTimestamp(DateTimeOffset value)
+        => value == default ? "n/a" : value.UtcDateTime.ToString("yyyy-MM-dd HH:mm:ss 'UTC'");
 
     public void Dispose()
     {

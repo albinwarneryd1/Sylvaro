@@ -14,6 +14,7 @@ public class AuthSession
 
     public string TenantName { get; private set; } = string.Empty;
     public string Email { get; private set; } = string.Empty;
+    public DateTimeOffset LastAuthenticatedAt { get; private set; }
 
     public bool IsAuthenticated => !string.IsNullOrWhiteSpace(AccessToken);
     public bool IsInitialized => _initialized;
@@ -27,6 +28,7 @@ public class AuthSession
         AccessToken = accessToken;
         RefreshToken = refreshToken;
         RefreshTokenExpiresAt = refreshTokenExpiresAt;
+        LastAuthenticatedAt = DateTimeOffset.UtcNow;
         Changed?.Invoke();
     }
 
@@ -37,6 +39,7 @@ public class AuthSession
         RefreshTokenExpiresAt = default;
         TenantName = string.Empty;
         Email = string.Empty;
+        LastAuthenticatedAt = default;
         Changed?.Invoke();
     }
 
@@ -60,6 +63,9 @@ public class AuthSession
                     AccessToken = persisted.AccessToken;
                     RefreshToken = persisted.RefreshToken;
                     RefreshTokenExpiresAt = persisted.RefreshTokenExpiresAt;
+                    LastAuthenticatedAt = persisted.LastAuthenticatedAt == default
+                        ? DateTimeOffset.UtcNow
+                        : persisted.LastAuthenticatedAt;
                 }
             }
         }
@@ -81,7 +87,8 @@ public class AuthSession
             Email,
             AccessToken,
             RefreshToken,
-            RefreshTokenExpiresAt));
+            RefreshTokenExpiresAt,
+            LastAuthenticatedAt));
         await jsRuntime.InvokeVoidAsync("localStorage.setItem", StorageKey, payload);
     }
 
@@ -96,5 +103,6 @@ public class AuthSession
         string Email,
         string AccessToken,
         string RefreshToken,
-        DateTimeOffset RefreshTokenExpiresAt);
+        DateTimeOffset RefreshTokenExpiresAt,
+        DateTimeOffset LastAuthenticatedAt);
 }

@@ -1,0 +1,129 @@
+@page "/security-center"
+@using System.Security.Cryptography
+@inject Normyx.Web.Services.AuthSession Session
+
+<PageTitle>Security Center - Normyx AI</PageTitle>
+
+@if (!Session.IsAuthenticated)
+{
+    <div class="card-shell"><p>Authentication required. Use <a href="/login">Sign In</a> to access security controls.</p></div>
+}
+else
+{
+    <div class="section-head">
+        <div>
+            <h1>Security Center</h1>
+            <p>Session governance, access hardening and machine-to-machine token controls.</p>
+        </div>
+        <div class="status-line">
+            <span class="risk-pill info">MFA Status: Planned</span>
+            <span class="risk-pill success">Password Policy: Enforced</span>
+            <span class="risk-pill warning">Active Sessions: @_activeSessions.Count</span>
+        </div>
+    </div>
+
+    <div class="grid-cards">
+        <section class="card-shell">
+            <h2>Session Management</h2>
+            <ul>
+                <li>Last login: @FormatTimestamp(Session.LastAuthenticatedAt)</li>
+                <li>Refresh token expiry: @FormatTimestamp(Session.RefreshTokenExpiresAt)</li>
+                <li>Session policy: 60 min idle timeout (target policy)</li>
+            </ul>
+            <table class="table-shell">
+                <thead><tr><th>Session</th><th>IP</th><th>Started</th><th>Status</th></tr></thead>
+                <tbody>
+                    @foreach (var item in _activeSessions)
+                    {
+                        <tr>
+                            <td>@item.SessionRef</td>
+                            <td>@item.Ip</td>
+                            <td>@item.StartedAt.ToString("u")</td>
+                            <td><span class="risk-pill info">@item.Status</span></td>
+                        </tr>
+                    }
+                </tbody>
+            </table>
+        </section>
+
+        <section class="card-shell">
+            <h2>Authentication Hardening</h2>
+            <label><InputCheckbox @bind-Value="_mfaPlaceholder" disabled="true" /> Require MFA for privileged roles (MVP placeholder)</label>
+            <ul>
+                <li>Minimum password length: 12 characters</li>
+                <li>Complexity rule: upper/lower/number/symbol</li>
+                <li>Rotation policy: every 90 days for admin users</li>
+                <li>Audit events: login success/failure + token lifecycle</li>
+            </ul>
+        </section>
+
+        <section class="card-shell metric-card wide">
+            <h2>API Tokens Management</h2>
+            <p>Issue scoped integration tokens for automation pipelines. Tokens are masked after creation.</p>
+            <div class="field-grid">
+                <InputText @bind-Value="_tokenName" class="text-input" placeholder="Token name" />
+                <InputSelect @bind-Value="_tokenScope" class="text-input">
+                    <option value="read:all">read:all</option>
+                    <option value="write:actions">write:actions</option>
+                    <option value="export:reports">export:reports</option>
+                </InputSelect>
+            </div>
+            <div class="btn-row">
+                <button class="btn-small" @onclick="CreateToken">Create Token</button>
+            </div>
+
+            <table class="table-shell">
+                <thead><tr><th>Name</th><th>Scope</th><th>Created</th><th>Token Ref</th><th></th></tr></thead>
+                <tbody>
+                    @foreach (var token in _tokens)
+                    {
+                        <tr>
+                            <td>@token.Name</td>
+                            <td>@token.Scope</td>
+                            <td>@token.CreatedAt.ToString("u")</td>
+                            <td>@token.TokenRef</td>
+                            <td><button class="btn-small" @onclick="() => RevokeToken(token.Id)">Revoke</button></td>
+                        </tr>
+                    }
+                </tbody>
+            </table>
+        </section>
+    </div>
+}
+
+@code {
+    private bool _mfaPlaceholder;
+    private string _tokenName = "integration-token";
+    private string _tokenScope = "read:all";
+
+    private readonly List<SessionRow> _activeSessions =
+    [
+        new($"sess-{Guid.NewGuid().ToString()[..8]}", "current-client", DateTimeOffset.UtcNow.AddMinutes(-5), "Active")
+    ];
+
+    private readonly List<TokenRow> _tokens = [];
+
+    private void CreateToken()
+    {
+        if (string.IsNullOrWhiteSpace(_tokenName))
+        {
+            return;
+        }
+
+        var tokenBytes = RandomNumberGenerator.GetBytes(24);
+        var tokenRef = Convert.ToBase64String(tokenBytes);
+        _tokens.Insert(0, new TokenRow(Guid.NewGuid(), _tokenName.Trim(), _tokenScope, DateTimeOffset.UtcNow, $"nxa_{tokenRef[..10]}..."));
+        _tokenName = "integration-token";
+    }
+
+    private void RevokeToken(Guid id)
+    {
+        _tokens.RemoveAll(x => x.Id == id);
+    }
+
+    private static string FormatTimestamp(DateTimeOffset value)
+        => value == default ? "n/a" : value.UtcDateTime.ToString("yyyy-MM-dd HH:mm:ss 'UTC'");
+
+    private sealed record SessionRow(string SessionRef, string Ip, DateTimeOffset StartedAt, string Status);
+    private sealed record TokenRow(Guid Id, string Name, string Scope, DateTimeOffset CreatedAt, string TokenRef);
+}
