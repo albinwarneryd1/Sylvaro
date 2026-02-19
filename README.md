@@ -1,13 +1,15 @@
 # Normyx AI
 
-Normyx AI is a compliance operations platform for AI systems with deterministic assessment logic, evidence mapping, human sign-off, and export workflows.
+Normyx AI is a compliance operations platform for AI systems with deterministic assessment logic, evidence mapping, human sign-off, RAG-backed context retrieval, and export/webhook workflows.
 
 ## What is included
 
-- `src/Normyx.Api` ASP.NET Core API with JWT auth, RBAC, tenant isolation, audit log, policy engine, assessments, findings/actions, and PDF exports.
-- `src/Normyx.Web` Blazor web app with login/register, dashboard, tenant settings, AI systems, assessment execution, and audit views.
-- `src/Normyx.Infrastructure` EF Core/PostgreSQL persistence, seeded demo data, AI draft service, policy pack evaluation.
+- `src/Normyx.Api` ASP.NET Core API with JWT auth, RBAC, tenant isolation, audit log, policy engine, assessments, findings/actions, evidence map/gaps, JSON+PDF exports, and webhook integrations.
+- `src/Normyx.Web` Blazor web app with login/register, dashboard, tenant settings, AI systems, diff view, actions kanban, evidence gaps/search, integration controls, and audit views.
+- `src/Normyx.Infrastructure` EF Core/PostgreSQL persistence, seeded demo data, provider-agnostic AI draft layer (Local/OpenAI/Azure-compatible), RAG indexing/search, policy pack evaluation.
 - `policy-packs/` versioned compliance-as-code JSON packs.
+- `prompts/` versioned prompt templates for structured JSON generation.
+- `reference-notes/` built-in compliance reference notes used in RAG.
 - `tests/Normyx.Tests` integration test for multi-tenant isolation using Testcontainers.
 
 ## One command start
@@ -37,8 +39,9 @@ After startup:
 4. Click `Run Assessment`.
 5. Review generated findings/actions.
 6. Approve actions through API or UI flow.
-7. Generate `DPIA_Draft` export (PDF) and download it.
-8. Open `Audit Log` to verify traceability.
+7. Configure Jira/Azure webhook stubs in `Tenant Settings` (optional).
+8. Generate `DPIA_Draft` export as PDF or JSON (optionally send webhook).
+9. Open `Audit Log` and `Evidence Gaps` to verify traceability.
 
 ## Local dev (without Docker)
 
@@ -68,10 +71,14 @@ dotnet run --project src/Normyx.Web/Normyx.Web.csproj
 - Architecture: `/versions/{versionId}/architecture`
 - Inventory: `/versions/{versionId}/inventory`
 - Evidence: `/documents/upload`, `/documents/{id}/download`
+- Evidence map/gaps/search: `/versions/{versionId}/evidence/map`, `/versions/{versionId}/evidence/gaps`, `/versions/{versionId}/evidence/search`
 - Assessments: `/versions/{versionId}/assessments/run`
+- Assessment diff: `/versions/{versionId}/assessments/diff/{otherVersionId}`
 - Findings: `/findings/assessment/{assessmentId}`
 - Actions: `/actions/version/{versionId}`, `/actions/{actionId}/approve`
-- Exports: `/exports/versions/{versionId}/generate`, `/exports/{artifactId}/download`
+- Exports: `/exports/versions/{versionId}/generate`, `/exports/versions/{versionId}`, `/exports/{artifactId}/download`
+- Integrations: `/integrations/webhooks`, `/integrations/webhooks/{provider}`
+- Tenant policy packs: `/tenants/policy-packs`, `/tenants/policy-packs/{policyPackId}/enabled`
 - Audit: `/audit`
 
 ## Compliance-as-code and AI schemas

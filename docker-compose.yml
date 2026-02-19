@@ -46,6 +46,11 @@ services:
       Jwt__Audience: normyx-web
       Jwt__SigningKey: ${JWT_SIGNING_KEY:-replace-with-a-long-random-secret-at-least-32-chars}
       Storage__RootPath: /data/uploads
+      AiProvider__Mode: ${AI_PROVIDER_MODE:-Local}
+      AiProvider__BaseUrl: ${AI_PROVIDER_BASE_URL:-https://api.openai.com/v1/chat/completions}
+      AiProvider__ApiKey: ${AI_PROVIDER_API_KEY:-}
+      AiProvider__Model: ${AI_PROVIDER_MODEL:-gpt-4.1-mini}
+      AiProvider__EnablePiiMasking: "true"
     ports:
       - "${API_PORT:-8081}:8080"
     volumes:
