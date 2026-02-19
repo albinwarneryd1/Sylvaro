@@ -6,7 +6,7 @@
 
 <div class="app-shell">
     <aside class="sidebar-panel">
-        <NavMenu IsAuthenticated="Session.IsAuthenticated" TenantName="Session.TenantName" />
+        <NavMenu IsAuthenticated="@Session.IsAuthenticated" TenantName="@Session.TenantName" />
     </aside>
 
     <main class="main-panel">
@@ -86,14 +86,64 @@
 
         _didInitialSessionRestore = true;
         await Session.EnsureInitializedAsync(JsRuntime);
+
+        if (!Session.IsAuthenticated && !IsPublicRoute)
+        {
+            NavigateToLogin();
+            return;
+        }
+
+        await InvokeAsync(StateHasChanged);
     }
 
-    private void OnSessionChanged() => InvokeAsync(StateHasChanged);
+    private void OnSessionChanged()
+    {
+        if (Session.IsInitialized && !Session.IsAuthenticated && !IsPublicRoute)
+        {
+            NavigateToLogin();
+            return;
+        }
+
+        _ = InvokeAsync(StateHasChanged);
+    }
 
     private void OnLocationChanged(object? sender, LocationChangedEventArgs e)
     {
         _currentPath = Nav.ToBaseRelativePath(e.Location);
+
+        if (Session.IsInitialized && !Session.IsAuthenticated && !IsPublicRoute)
+        {
+            NavigateToLogin();
+            return;
+        }
+
         _ = InvokeAsync(StateHasChanged);
+    }
+
+    private bool IsPublicRoute
+    {
+        get
+        {
+            if (string.IsNullOrWhiteSpace(_currentPath))
+            {
+                return false;
+            }
+
+            return _currentPath.StartsWith("login", StringComparison.OrdinalIgnoreCase)
+                || _currentPath.StartsWith("register", StringComparison.OrdinalIgnoreCase);
+        }
+    }
+
+    private void NavigateToLogin()
+    {
+        try
+        {
+            Nav.NavigateTo("/login", replace: true);
+        }
+        catch (NavigationException)
+        {
+            // Blazor can throw this as control-flow during navigation.
+        }
     }
 
     private static string FormatTimestamp(DateTimeOffset value)
@@ -102,6 +152,8 @@
     private string CurrentContextLabel
         => _currentPath switch
         {
+            var path when path.StartsWith("login", StringComparison.OrdinalIgnoreCase) => "Access Authentication",
+            var path when path.StartsWith("register", StringComparison.OrdinalIgnoreCase) => "Tenant Provisioning",
             var path when path.StartsWith("ai-systems/", StringComparison.OrdinalIgnoreCase) => "AI System Governance Workspace",
             var path when path.StartsWith("ai-systems", StringComparison.OrdinalIgnoreCase) => "AI Systems Inventory",
             var path when path.StartsWith("regulatory-exposure", StringComparison.OrdinalIgnoreCase) => "Regulatory Exposure Matrix",

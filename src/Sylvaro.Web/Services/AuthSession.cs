@@ -1,4 +1,3 @@
-using System.Text.Json;
 using Microsoft.JSInterop;
 
 namespace Sylvaro.Web.Services;
@@ -50,28 +49,15 @@ public class AuthSession
             return;
         }
 
+        // Security-default behavior: always start at login screen and do not auto-restore
+        // an authenticated session from browser storage.
         try
         {
-            var raw = await jsRuntime.InvokeAsync<string?>("localStorage.getItem", StorageKey);
-            if (!string.IsNullOrWhiteSpace(raw))
-            {
-                var persisted = JsonSerializer.Deserialize<PersistedSession>(raw);
-                if (persisted is not null && !string.IsNullOrWhiteSpace(persisted.AccessToken))
-                {
-                    TenantName = persisted.TenantName;
-                    Email = persisted.Email;
-                    AccessToken = persisted.AccessToken;
-                    RefreshToken = persisted.RefreshToken;
-                    RefreshTokenExpiresAt = persisted.RefreshTokenExpiresAt;
-                    LastAuthenticatedAt = persisted.LastAuthenticatedAt == default
-                        ? DateTimeOffset.UtcNow
-                        : persisted.LastAuthenticatedAt;
-                }
-            }
+            await jsRuntime.InvokeVoidAsync("localStorage.removeItem", StorageKey);
         }
         catch
         {
-            // Keep in-memory defaults if browser storage is unavailable.
+            // Ignore storage errors and continue with in-memory defaults.
         }
         finally
         {
@@ -80,29 +66,23 @@ public class AuthSession
         }
     }
 
-    public async Task PersistAsync(IJSRuntime jsRuntime)
+    public Task PersistAsync(IJSRuntime jsRuntime)
     {
-        var payload = JsonSerializer.Serialize(new PersistedSession(
-            TenantName,
-            Email,
-            AccessToken,
-            RefreshToken,
-            RefreshTokenExpiresAt,
-            LastAuthenticatedAt));
-        await jsRuntime.InvokeVoidAsync("localStorage.setItem", StorageKey, payload);
+        // Keep session in-memory only for current runtime; no browser persistence.
+        return Task.CompletedTask;
     }
 
     public async Task ClearPersistedAsync(IJSRuntime jsRuntime)
     {
         Clear();
-        await jsRuntime.InvokeVoidAsync("localStorage.removeItem", StorageKey);
-    }
 
-    private sealed record PersistedSession(
-        string TenantName,
-        string Email,
-        string AccessToken,
-        string RefreshToken,
-        DateTimeOffset RefreshTokenExpiresAt,
-        DateTimeOffset LastAuthenticatedAt);
+        try
+        {
+            await jsRuntime.InvokeVoidAsync("localStorage.removeItem", StorageKey);
+        }
+        catch
+        {
+            // Ignore storage cleanup failures.
+        }
+    }
 }
