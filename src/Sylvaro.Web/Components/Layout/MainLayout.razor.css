@@ -77,9 +77,9 @@
 .session-chip {
     border: 1px solid var(--border-subtle);
     background: var(--surface-elevated);
-    border-radius: 999px;
+    border-radius: 6px;
     padding: 0.24rem 0.52rem;
-    font-size: 0.68rem;
+    font-size: 0.7rem;
     color: var(--text-body);
 }
 
@@ -92,7 +92,7 @@
     border: 1px solid var(--border-strong);
     border-radius: 6px;
     padding: 0.24rem 0.5rem;
-    font-size: 0.68rem;
+    font-size: 0.7rem;
     color: var(--text-body);
     cursor: pointer;
     background: var(--surface-panel);

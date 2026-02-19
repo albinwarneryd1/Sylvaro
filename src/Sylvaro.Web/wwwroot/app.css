@@ -93,7 +93,7 @@ h5 {
 }
 
 h1 {
-    font-size: 28px;
+    font-size: 30px;
     line-height: 1.1;
 }
 
@@ -132,15 +132,15 @@ a:hover {
 }
 
 .section-label {
-    font-size: 12px;
+    font-size: 11px;
     text-transform: uppercase;
-    letter-spacing: 0.12em;
+    letter-spacing: 0.14em;
     color: var(--text-muted);
     font-weight: 600;
 }
 
 .metric-label {
-    font-size: 12px;
+    font-size: 11px;
     text-transform: uppercase;
     letter-spacing: 0.09em;
     color: var(--text-muted);
@@ -260,13 +260,13 @@ textarea.text-input,
 select.text-input,
 input.text-input {
     width: 100%;
-    min-height: 32px;
+    min-height: 36px;
     border: 1px solid var(--border-strong);
     border-radius: var(--radius-sm);
     background: var(--surface-panel);
     color: var(--text-strong);
     padding: 0.42rem 0.5rem;
-    font-size: 0.79rem;
+    font-size: 0.86rem;
 }
 
 .text-input:focus {
@@ -279,16 +279,17 @@ input.text-input {
     border-radius: var(--radius-sm);
     border: 1px solid transparent;
     cursor: pointer;
-    font-size: 0.76rem;
+    font-size: 0.78rem;
     font-weight: 600;
-    transition: opacity 150ms ease;
+    line-height: 1.2;
+    transition: opacity 150ms ease, transform 120ms ease;
 }
 
 .btn-main {
     background: var(--brand-primary);
     color: var(--text-inverse);
     border-color: var(--brand-secondary);
-    padding: 0.42rem 0.74rem;
+    padding: 0.5rem 0.78rem;
 }
 
 .btn-main.secondary {
@@ -312,7 +313,7 @@ input.text-input {
     background: var(--surface-elevated);
     border-color: var(--border-strong);
     color: var(--text-strong);
-    padding: 0.28rem 0.46rem;
+    padding: 0.34rem 0.56rem;
     text-decoration: none;
 }
 
@@ -486,7 +487,7 @@ input.text-input {
     display: inline-flex;
     align-items: center;
     gap: 0.24rem;
-    border-radius: 4px;
+    border-radius: 6px;
     padding: 0.12rem 0.32rem;
     border: 1px solid transparent;
     font-size: 0.68rem;
