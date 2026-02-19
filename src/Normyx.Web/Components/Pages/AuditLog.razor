@@ -4,7 +4,11 @@
 
 <PageTitle>Audit Records - Normyx AI</PageTitle>
 
-@if (!Session.IsAuthenticated)
+@if (!Session.IsInitialized)
+{
+    <div class="card-shell"><p>Restoring secure session...</p></div>
+}
+else if (!Session.IsAuthenticated)
 {
     <div class="card-shell"><p>Authentication required. Use <a href="/login">Sign In</a> to review immutable records.</p></div>
 }

@@ -4,7 +4,11 @@
 
 <PageTitle>AI System Detail - Normyx AI</PageTitle>
 
-@if (!Session.IsAuthenticated)
+@if (!Session.IsInitialized)
+{
+    <div class="card-shell"><p>Restoring secure session...</p></div>
+}
+else if (!Session.IsAuthenticated)
 {
     <div class="card-shell"><p>Please <a href="/login">log in</a>.</p></div>
 }

@@ -61,10 +61,6 @@
             await Session.PersistAsync(JsRuntime);
             Nav.NavigateTo("/");
         }
-        catch (NavigationException)
-        {
-            throw;
-        }
         catch (Exception ex)
         {
             _error = ex.Message;
