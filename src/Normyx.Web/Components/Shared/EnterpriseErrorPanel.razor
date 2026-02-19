@@ -1,0 +1,123 @@
+@using System.Text.RegularExpressions
+
+@if (!string.IsNullOrWhiteSpace(ErrorText))
+{
+    <div class="alert-panel" role="alert">
+        <strong>@ResolvedTitle</strong>
+        <p>@ResolvedSummary</p>
+        <p class="context-text">Correlation ID: @ResolvedCorrelationId</p>
+
+        @if (OnRetry.HasDelegate)
+        {
+            <div class="btn-row" style="margin-top:0.4rem; margin-bottom:0;">
+                <button class="btn-small" @onclick="HandleRetryAsync">@RetryLabel</button>
+            </div>
+        }
+
+        <details>
+            <summary>Technical details</summary>
+            <pre>@ErrorText</pre>
+        </details>
+    </div>
+}
+
+@code {
+    [Parameter] public string? ErrorText { get; set; }
+    [Parameter] public string? FriendlyMessage { get; set; }
+    [Parameter] public string RetryLabel { get; set; } = "Retry";
+    [Parameter] public EventCallback OnRetry { get; set; }
+
+    private string ResolvedTitle
+    {
+        get
+        {
+            if (string.IsNullOrWhiteSpace(ErrorText))
+            {
+                return FriendlyMessage ?? "An error occurred.";
+            }
+
+            var error = ErrorText;
+            if (error.Contains("JSON value could not be converted", StringComparison.OrdinalIgnoreCase))
+            {
+                return "An assessment parsing error occurred.";
+            }
+
+            if (error.Contains("unauthorized", StringComparison.OrdinalIgnoreCase) || error.Contains("(401)", StringComparison.OrdinalIgnoreCase))
+            {
+                return "Authentication is required to continue.";
+            }
+
+            if (error.Contains("forbidden", StringComparison.OrdinalIgnoreCase) || error.Contains("(403)", StringComparison.OrdinalIgnoreCase))
+            {
+                return "Insufficient privileges for this action.";
+            }
+
+            if (error.Contains("validation_failed", StringComparison.OrdinalIgnoreCase))
+            {
+                return "Submitted data failed compliance validation.";
+            }
+
+            return FriendlyMessage ?? "A platform operation failed.";
+        }
+    }
+
+    private string ResolvedSummary
+    {
+        get
+        {
+            if (string.IsNullOrWhiteSpace(ErrorText))
+            {
+                return "Unexpected runtime behavior was captured.";
+            }
+
+            var error = ErrorText;
+            if (error.Contains("JSON value could not be converted", StringComparison.OrdinalIgnoreCase))
+            {
+                return "A structured response could not be interpreted. Retry the operation. If the issue persists, review provider output schema alignment.";
+            }
+
+            if (error.Contains("unauthorized", StringComparison.OrdinalIgnoreCase) || error.Contains("(401)", StringComparison.OrdinalIgnoreCase))
+            {
+                return "Your secure session may have expired. Sign in again and retry.";
+            }
+
+            if (error.Contains("forbidden", StringComparison.OrdinalIgnoreCase) || error.Contains("(403)", StringComparison.OrdinalIgnoreCase))
+            {
+                return "Your assigned role does not permit this regulated action.";
+            }
+
+            return "The operation did not complete successfully. Review technical details for diagnostics.";
+        }
+    }
+
+    private string ResolvedCorrelationId
+    {
+        get
+        {
+            if (string.IsNullOrWhiteSpace(ErrorText))
+            {
+                return "Unavailable";
+            }
+
+            var value = TryExtract("correlationId\\W*[:=]\\W*\\\"?(?<id>[A-Za-z0-9\\-]+)")
+                ?? TryExtract("corr:\\s*(?<id>[A-Za-z0-9\\-]+)")
+                ?? TryExtract("Correlation ID\\W*[:=]\\W*(?<id>[A-Za-z0-9\\-]+)");
+
+            return string.IsNullOrWhiteSpace(value) ? "Unavailable" : value;
+        }
+    }
+
+    private string? TryExtract(string pattern)
+    {
+        if (string.IsNullOrWhiteSpace(ErrorText))
+        {
+            return null;
+        }
+
+        var match = Regex.Match(ErrorText, pattern, RegexOptions.IgnoreCase | RegexOptions.CultureInvariant);
+        return match.Success ? match.Groups["id"].Value : null;
+    }
+
+    private Task HandleRetryAsync()
+        => OnRetry.InvokeAsync();
+}

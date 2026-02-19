@@ -21,7 +21,7 @@ else
 
         @if (!string.IsNullOrWhiteSpace(_error))
         {
-            <div class="alert-danger">@_error</div>
+            <EnterpriseErrorPanel ErrorText="@_error" FriendlyMessage="Tenant governance operation failed." OnRetry="LoadAsync" />
         }
 
         @if (_tenant is not null)
@@ -138,6 +138,7 @@ else
     private readonly WebhookForm _jira = new();
     private readonly WebhookForm _azureDevOps = new();
     private readonly HashSet<string> _selectedNewUserRoles = ["ProductOwner"];
+    private bool _attemptedInitialLoad;
 
     protected override async Task OnInitializedAsync()
     {
@@ -146,7 +147,20 @@ else
             return;
         }
 
+        _attemptedInitialLoad = true;
         await LoadAsync();
+    }
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (_attemptedInitialLoad || !Session.IsInitialized || !Session.IsAuthenticated)
+        {
+            return;
+        }
+
+        _attemptedInitialLoad = true;
+        await LoadAsync();
+        await InvokeAsync(StateHasChanged);
     }
 
     private async Task LoadAsync()

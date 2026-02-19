@@ -1,6 +1,7 @@
 @page "/ai-systems/{SystemId:guid}"
 @inject Normyx.Web.Services.NormyxApiClient Api
 @inject Normyx.Web.Services.AuthSession Session
+@inject IJSRuntime JsRuntime
 
 <PageTitle>AI System Detail - Normyx AI</PageTitle>
 
@@ -28,7 +29,7 @@ else
 
         @if (!string.IsNullOrWhiteSpace(_error))
         {
-            <div class="alert-danger">@_error</div>
+            <EnterpriseErrorPanel ErrorText="@_error" FriendlyMessage="AI system workspace operation failed." OnRetry="LoadSystemAsync" />
         }
 
         <div class="tab-row">
@@ -114,6 +115,7 @@ else
             <div class="field-grid">
                 <label><InputCheckbox @bind-Value="_showPersonalDataOnly" /> Show personal-data flows only</label>
                 <label><InputCheckbox @bind-Value="_showHighRiskFlowsOnly" /> Show high-risk flows only</label>
+                <label><InputCheckbox @bind-Value="_showVendorOverlay" /> Show vendor dependency overlay</label>
             </div>
 
             <div class="zone-grid">
@@ -132,6 +134,10 @@ else
                                     @onclick="() => SelectComponent(component.Id)">
                                 <strong>@component.Name</strong>
                                 <span>@component.Type | @component.DataSensitivityLevel</span>
+                                @if (_showVendorOverlay && HasVendorDependency(component))
+                                {
+                                    <span class="risk-pill warning">Vendor Dependency</span>
+                                }
                             </button>
                         }
                     </section>
@@ -175,6 +181,31 @@ else
                             <td>@string.Join(", ", flow.DataCategories)</td>
                             <td>@flow.Purpose</td>
                             <td>@(flow.EncryptionInTransit ? "Encrypted" : "Unencrypted")</td>
+                        </tr>
+                    }
+                </tbody>
+            </table>
+
+            <h3>Data Flow Matrix</h3>
+            <table class="table-shell">
+                <thead>
+                    <tr>
+                        <th>Component</th>
+                        <th>Outbound Flows</th>
+                        <th>Inbound Flows</th>
+                        <th>Sensitive Categories</th>
+                        <th>Risk</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    @foreach (var row in GetDataFlowMatrixRows())
+                    {
+                        <tr>
+                            <td>@row.ComponentName</td>
+                            <td>@row.Outbound</td>
+                            <td>@row.Inbound</td>
+                            <td>@string.Join(", ", row.SensitiveCategories)</td>
+                            <td><span class="@($"risk-pill {ToRiskPillClass(row.Risk)}")">@row.Risk</span></td>
                         </tr>
                     }
                 </tbody>
@@ -290,21 +321,70 @@ else
         @if (_currentVersionId is not null && IsTab("Risk Analysis"))
         {
             <h2>Risk Matrix View</h2>
-            <p class="muted">Component vs regulatory risk domains.</p>
-            <div class="heatmap">
-                @foreach (var index in Enumerable.Range(1, 20))
+            <p class="muted">Component-by-domain matrix with perspective toggles and analytical drill-down.</p>
+
+            <div class="btn-row">
+                @foreach (var perspective in RiskPerspectives)
                 {
-                    <div class="heat-cell @GetRiskCellClass(index)"></div>
+                    <button class="btn-small" @onclick="() => SetRiskPerspective(perspective)">
+                        @perspective @if (_riskPerspective == perspective)
+                        {
+                            <text>(active)</text>
+                        }
+                    </button>
                 }
             </div>
 
-            <h3>Assessment Runs</h3>
-            <ul>
-                @foreach (var assessment in _assessments)
-                {
-                    <li>@assessment.RanAt.ToString("u") - @assessment.RiskScoresJson</li>
-                }
-            </ul>
+            <div class="card-shell" style="margin-bottom:0.75rem;">
+                <h3>Severity Legend</h3>
+                <div class="status-line">
+                    <span class="risk-pill danger" title="Immediate regulatory/control deficiency">Critical</span>
+                    <span class="risk-pill danger" title="High-priority remediation required">High</span>
+                    <span class="risk-pill warning" title="Monitor and plan control uplift">Medium</span>
+                    <span class="risk-pill info" title="Low exposure with baseline controls">Low</span>
+                    <span class="risk-pill success" title="Controls currently sufficient">Compliant</span>
+                </div>
+            </div>
+
+            <table class="table-shell">
+                <thead>
+                    <tr>
+                        <th>Component</th>
+                        @foreach (var axis in GetRiskAxes())
+                        {
+                            <th>@axis</th>
+                        }
+                    </tr>
+                </thead>
+                <tbody>
+                    @foreach (var row in GetRiskMatrixRows())
+                    {
+                        <tr>
+                            <td>
+                                <button class="btn-small" @onclick="() => SelectRiskComponent(row.ComponentId)">@row.ComponentName</button>
+                            </td>
+                            @foreach (var severity in row.Severities)
+                            {
+                                <td><span class="@($"risk-pill {ToRiskPillClass(severity)}")" title="@GetRiskTooltip(row.ComponentName, severity)">@severity</span></td>
+                            }
+                        </tr>
+                    }
+                </tbody>
+            </table>
+
+            @if (GetSelectedRiskMatrixRow() is { } selectedRiskRow)
+            {
+                <div class="card-shell" style="margin-top:0.75rem;">
+                    <h3>Risk Justification Panel</h3>
+                    <p><strong>@selectedRiskRow.ComponentName</strong> is evaluated in <strong>@_riskPerspective</strong> mode.</p>
+                    <ul>
+                        @foreach (var note in GetRiskJustifications(selectedRiskRow))
+                        {
+                            <li>@note</li>
+                        }
+                    </ul>
+                </div>
+            }
         }
 
         @if (_currentVersionId is not null && IsTab("Findings"))
@@ -337,15 +417,23 @@ else
 
         @if (_currentVersionId is not null && IsTab("Actions"))
         {
-            <h2>Compliance Obligation Board</h2>
+            <h2>Remediation Intelligence Board</h2>
+            <p class="muted">Kanban execution with compliance impact, evidence completeness, and sign-off controls.</p>
             <div class="kanban-board">
                 <div class="kanban-col">
                     <h4>Critical / New</h4>
-                    @foreach (var action in _actionBoard.New)
+                    @foreach (var action in _actionBoard.New.OrderByDescending(GetActionImpactScore))
                     {
                         <article class="kanban-card" data-priority="@action.Priority">
                             <strong>@action.Title</strong>
-                            <span>@action.Priority / @action.OwnerRole</span>
+                            <div class="status-line">
+                                <span class="@($"risk-pill {ToRiskPillClass(MapPriorityToSeverity(action.Priority))}")">@action.Priority</span>
+                                <span class="risk-pill info">Impact @GetActionImpactScore(action)</span>
+                                <span class="risk-pill warning">Risk Reduction @GetActionRiskReduction(action)%</span>
+                            </div>
+                            <span><strong class="avatar-chip">@GetOwnerAvatar(action.OwnerRole)</strong> @action.OwnerRole</span>
+                            <span>Due: @(action.DueDate?.ToString("yyyy-MM-dd") ?? "Not set")</span>
+                            <span>Evidence: @GetActionEvidencePercent(action)%</span>
                             <div class="btn-row">
                                 <button class="btn-small" @onclick="() => UpdateActionStatusAsync(action.Id, 1)">Move to In Progress</button>
                             </div>
@@ -355,11 +443,18 @@ else
 
                 <div class="kanban-col">
                     <h4>In Progress</h4>
-                    @foreach (var action in _actionBoard.InProgress)
+                    @foreach (var action in _actionBoard.InProgress.OrderByDescending(GetActionImpactScore))
                     {
                         <article class="kanban-card" data-priority="@action.Priority">
                             <strong>@action.Title</strong>
-                            <span>@action.Priority / @action.OwnerRole</span>
+                            <div class="status-line">
+                                <span class="@($"risk-pill {ToRiskPillClass(MapPriorityToSeverity(action.Priority))}")">@action.Priority</span>
+                                <span class="risk-pill info">Impact @GetActionImpactScore(action)</span>
+                                <span class="risk-pill warning">Risk Reduction @GetActionRiskReduction(action)%</span>
+                            </div>
+                            <span><strong class="avatar-chip">@GetOwnerAvatar(action.OwnerRole)</strong> @action.OwnerRole</span>
+                            <span>Due: @(action.DueDate?.ToString("yyyy-MM-dd") ?? "Not set")</span>
+                            <span>Evidence: @GetActionEvidencePercent(action)%</span>
                             <div class="btn-row">
                                 <button class="btn-small" @onclick="() => UpdateActionStatusAsync(action.Id, 2)">Mark Complete</button>
                                 <button class="btn-small" @onclick="() => ReviewActionAsync(action.Id, 1)">Approve & Sign Off</button>
@@ -372,10 +467,12 @@ else
 
                 <div class="kanban-col">
                     <h4>Completed</h4>
-                    @foreach (var action in _actionBoard.Done)
+                    @foreach (var action in _actionBoard.Done.OrderByDescending(GetActionImpactScore))
                     {
                         <article class="kanban-card" data-priority="@action.Priority">
                             <strong>@action.Title</strong>
+                            <span><strong class="avatar-chip">@GetOwnerAvatar(action.OwnerRole)</strong> @action.OwnerRole</span>
+                            <span>Evidence: @GetActionEvidencePercent(action)%</span>
                             <span>Approved: @action.ApprovedAt?.ToString("u")</span>
                         </article>
                     }
@@ -383,10 +480,12 @@ else
 
                 <div class="kanban-col">
                     <h4>Accepted Risk</h4>
-                    @foreach (var action in _actionBoard.AcceptedRisk)
+                    @foreach (var action in _actionBoard.AcceptedRisk.OrderByDescending(GetActionImpactScore))
                     {
                         <article class="kanban-card" data-priority="@action.Priority">
                             <strong>@action.Title</strong>
+                            <span class="risk-pill warning">Escalation Required</span>
+                            <span><strong class="avatar-chip">@GetOwnerAvatar(action.OwnerRole)</strong> @action.OwnerRole</span>
                         </article>
                     }
                 </div>
@@ -424,6 +523,10 @@ else
                     <h3>Evidence Excerpts</h3>
                     <p>@_documents.Sum(x => x.ExcerptCount)</p>
                 </section>
+            </div>
+
+            <div class="btn-row">
+                <button class="btn-small" @onclick="ExportEvidenceMapAsync" disabled="@_exportingEvidenceMap">@(_exportingEvidenceMap ? "Exporting..." : "Export Evidence Map")</button>
             </div>
 
             @if (ExpiredDocumentCount > 0)
@@ -599,6 +702,7 @@ else
     private bool _loading = true;
     private string _error = string.Empty;
     private string _uploadMessage = string.Empty;
+    private bool _exportingEvidenceMap;
 
     private Normyx.Web.Models.AiSystemDetailDto? _system;
     private List<Normyx.Web.Models.VersionSummaryDto> _versions = [];
@@ -635,8 +739,13 @@ else
     private string _evidenceQuery = "DPIA lawful basis transfer";
     private string _activeTab = "Overview";
     private Guid? _selectedComponentId;
+    private Guid? _selectedRiskComponentId;
     private bool _showPersonalDataOnly;
     private bool _showHighRiskFlowsOnly;
+    private bool _showVendorOverlay;
+    private string _riskPerspective = "Regulatory";
+    private bool _attemptedInitialLoad;
+    private Guid _loadedSystemId;
 
     private static readonly string[] WorkspaceTabs =
     [
@@ -652,17 +761,54 @@ else
         "Reports"
     ];
 
+    private static readonly string[] RiskPerspectives =
+    [
+        "Regulatory",
+        "Security",
+        "Data Privacy"
+    ];
+
     protected override async Task OnParametersSetAsync()
     {
+        if (_loadedSystemId != SystemId)
+        {
+            _attemptedInitialLoad = false;
+        }
+
         if (!Session.IsAuthenticated)
         {
             _loading = false;
             return;
         }
 
+        _attemptedInitialLoad = true;
+        await LoadCurrentSystemAsync();
+    }
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (_attemptedInitialLoad || !Session.IsInitialized || !Session.IsAuthenticated)
+        {
+            return;
+        }
+
+        _attemptedInitialLoad = true;
+        await LoadCurrentSystemAsync();
+        await InvokeAsync(StateHasChanged);
+    }
+
+    private async Task LoadCurrentSystemAsync()
+    {
         _loading = true;
-        await LoadSystemAsync();
-        _loading = false;
+        try
+        {
+            await LoadSystemAsync();
+            _loadedSystemId = SystemId;
+        }
+        finally
+        {
+            _loading = false;
+        }
     }
 
     private async Task LoadSystemAsync()
@@ -691,53 +837,73 @@ else
 
     private async Task SelectVersionAsync(Guid versionId)
     {
-        _currentVersionId = versionId;
-        await LoadVersionDataAsync(versionId);
+        try
+        {
+            _error = string.Empty;
+            _currentVersionId = versionId;
+            await LoadVersionDataAsync(versionId);
+        }
+        catch (Exception ex)
+        {
+            _error = ex.Message;
+        }
     }
 
     private async Task LoadVersionDataAsync(Guid versionId)
     {
-        _architecture = await Api.GetAsync<Normyx.Web.Models.ArchitectureResponse>($"/versions/{versionId}/architecture") ?? new([], [], []);
-        if (_selectedComponentId is null || !_architecture.Components.Any(x => x.Id == _selectedComponentId.Value))
+        try
         {
-            _selectedComponentId = _architecture.Components.FirstOrDefault()?.Id;
+            _error = string.Empty;
+            _architecture = await Api.GetAsync<Normyx.Web.Models.ArchitectureResponse>($"/versions/{versionId}/architecture") ?? new([], [], []);
+            if (_selectedComponentId is null || !_architecture.Components.Any(x => x.Id == _selectedComponentId.Value))
+            {
+                _selectedComponentId = _architecture.Components.FirstOrDefault()?.Id;
+            }
+            if (_selectedRiskComponentId is null || !_architecture.Components.Any(x => x.Id == _selectedRiskComponentId.Value))
+            {
+                _selectedRiskComponentId = _architecture.Components.FirstOrDefault()?.Id;
+            }
+
+            _inventory = await Api.GetAsync<Normyx.Web.Models.InventoryResponse>($"/versions/{versionId}/inventory") ?? new([], []);
+            _assessments = (await Api.GetAsync<List<Normyx.Web.Models.AssessmentListItem>>($"/versions/{versionId}/assessments")) ?? [];
+            _actions = (await Api.GetAsync<List<Normyx.Web.Models.ActionItemDto>>($"/actions/version/{versionId}")) ?? [];
+            _actionBoard = (await Api.GetAsync<Normyx.Web.Models.ActionBoardDto>($"/actions/board/{versionId}")) ?? new([], [], [], []);
+            _evidenceMap = await Api.GetAsync<Normyx.Web.Models.EvidenceMapResponse>($"/versions/{versionId}/evidence/map") ?? new([], [], []);
+            _evidenceGaps = await Api.GetAsync<Normyx.Web.Models.EvidenceGapsResponse>($"/versions/{versionId}/evidence/gaps") ?? new(0, [], []);
+            _exports = (await Api.GetAsync<List<Normyx.Web.Models.ExportListItemDto>>($"/exports/versions/{versionId}")) ?? [];
+            _documents = (await Api.GetAsync<List<Normyx.Web.Models.DocumentListItemDto>>("/documents")) ?? [];
+
+            if (_selectedDocumentId is null || !_documents.Any(x => x.Id == _selectedDocumentId.Value))
+            {
+                _selectedDocumentId = _documents.FirstOrDefault()?.Id;
+            }
+
+            await LoadExcerptsAsync();
+
+            var questionnaire = await Api.GetAsync<Normyx.Web.Models.QuestionnaireResponse>($"/versions/{versionId}/questionnaire");
+            if (questionnaire is not null)
+            {
+                _questionnaire.AutomatedDecisionMaking = questionnaire.Answers.TryGetValue("automatedDecisionMaking", out var auto) ? auto : "false";
+                _questionnaire.CriticalSector = questionnaire.Answers.TryGetValue("criticalSector", out var critical) ? critical : "false";
+            }
+
+            if (_assessments.Count > 0)
+            {
+                var latest = _assessments.OrderByDescending(x => x.RanAt).First();
+                _findings = (await Api.GetAsync<List<Normyx.Web.Models.FindingDto>>($"/findings/assessment/{latest.Id}")) ?? [];
+            }
+            else
+            {
+                _findings = [];
+            }
+
+            _recentReviews = (await Api.GetAsync<List<Normyx.Web.Models.ActionReviewDto>>($"/actions/version/{versionId}/reviews")) ?? [];
+            EnsureEvidenceLinkDefaults();
         }
-
-        _inventory = await Api.GetAsync<Normyx.Web.Models.InventoryResponse>($"/versions/{versionId}/inventory") ?? new([], []);
-        _assessments = (await Api.GetAsync<List<Normyx.Web.Models.AssessmentListItem>>($"/versions/{versionId}/assessments")) ?? [];
-        _actions = (await Api.GetAsync<List<Normyx.Web.Models.ActionItemDto>>($"/actions/version/{versionId}")) ?? [];
-        _actionBoard = (await Api.GetAsync<Normyx.Web.Models.ActionBoardDto>($"/actions/board/{versionId}")) ?? new([], [], [], []);
-        _evidenceMap = await Api.GetAsync<Normyx.Web.Models.EvidenceMapResponse>($"/versions/{versionId}/evidence/map") ?? new([], [], []);
-        _evidenceGaps = await Api.GetAsync<Normyx.Web.Models.EvidenceGapsResponse>($"/versions/{versionId}/evidence/gaps") ?? new(0, [], []);
-        _exports = (await Api.GetAsync<List<Normyx.Web.Models.ExportListItemDto>>($"/exports/versions/{versionId}")) ?? [];
-        _documents = (await Api.GetAsync<List<Normyx.Web.Models.DocumentListItemDto>>("/documents")) ?? [];
-
-        if (_selectedDocumentId is null || !_documents.Any(x => x.Id == _selectedDocumentId.Value))
+        catch (Exception ex)
         {
-            _selectedDocumentId = _documents.FirstOrDefault()?.Id;
+            _error = ex.Message;
         }
-
-        await LoadExcerptsAsync();
-
-        var questionnaire = await Api.GetAsync<Normyx.Web.Models.QuestionnaireResponse>($"/versions/{versionId}/questionnaire");
-        if (questionnaire is not null)
-        {
-            _questionnaire.AutomatedDecisionMaking = questionnaire.Answers.TryGetValue("automatedDecisionMaking", out var auto) ? auto : "false";
-            _questionnaire.CriticalSector = questionnaire.Answers.TryGetValue("criticalSector", out var critical) ? critical : "false";
-        }
-
-        if (_assessments.Count > 0)
-        {
-            var latest = _assessments.OrderByDescending(x => x.RanAt).First();
-            _findings = (await Api.GetAsync<List<Normyx.Web.Models.FindingDto>>($"/findings/assessment/{latest.Id}")) ?? [];
-        }
-        else
-        {
-            _findings = [];
-        }
-
-        _recentReviews = (await Api.GetAsync<List<Normyx.Web.Models.ActionReviewDto>>($"/actions/version/{versionId}/reviews")) ?? [];
-        EnsureEvidenceLinkDefaults();
     }
 
     private async Task RunAssessmentAsync()
@@ -1134,6 +1300,28 @@ else
         }
     }
 
+    private async Task ExportEvidenceMapAsync()
+    {
+        try
+        {
+            _exportingEvidenceMap = true;
+            var payload = System.Text.Json.JsonSerializer.Serialize(_evidenceMap, new System.Text.Json.JsonSerializerOptions
+            {
+                WriteIndented = true
+            });
+            var dataUrl = $"data:application/json;charset=utf-8,{Uri.EscapeDataString(payload)}";
+            await JsRuntime.InvokeVoidAsync("open", dataUrl, "_blank");
+        }
+        catch (Exception ex)
+        {
+            _error = ex.Message;
+        }
+        finally
+        {
+            _exportingEvidenceMap = false;
+        }
+    }
+
     private string ResolveComponentName(Guid componentId)
         => _architecture.Components.FirstOrDefault(c => c.Id == componentId)?.Name ?? componentId.ToString()[..8];
 
@@ -1159,6 +1347,147 @@ else
         }
 
         _activeTab = tab;
+    }
+
+    private void SetRiskPerspective(string perspective)
+    {
+        if (!RiskPerspectives.Contains(perspective, StringComparer.Ordinal))
+        {
+            return;
+        }
+
+        _riskPerspective = perspective;
+    }
+
+    private IEnumerable<string> GetRiskAxes()
+        => _riskPerspective switch
+        {
+            "Security" => ["Access Control", "Monitoring", "Incident Response"],
+            "Data Privacy" => ["Personal Data", "International Transfers", "Retention"],
+            _ => ["AI Act", "GDPR", "NIS2"]
+        };
+
+    private IEnumerable<RiskMatrixRow> GetRiskMatrixRows()
+        => _architecture.Components
+            .OrderBy(x => x.Name)
+            .Take(12)
+            .Select(component => new RiskMatrixRow(
+                component.Id,
+                component.Name,
+                GetRiskAxes().Select(axis => EvaluateRiskSeverity(component, axis)).ToArray()));
+
+    private void SelectRiskComponent(Guid componentId)
+        => _selectedRiskComponentId = componentId;
+
+    private RiskMatrixRow? GetSelectedRiskMatrixRow()
+        => GetRiskMatrixRows().FirstOrDefault(x => x.ComponentId == _selectedRiskComponentId);
+
+    private string EvaluateRiskSeverity(Normyx.Web.Models.ComponentDto component, string axis)
+    {
+        var hasPersonalFlow = _architecture.Flows.Any(flow =>
+            (flow.FromComponentId == component.Id || flow.ToComponentId == component.Id) &&
+            flow.DataCategories.Any(category => category.Contains("personal", StringComparison.OrdinalIgnoreCase)));
+
+        var hasExternalVendor = component.IsExternal || _inventory.Vendors.Any(vendor =>
+            component.Name.Contains(vendor.Name, StringComparison.OrdinalIgnoreCase));
+
+        return axis switch
+        {
+            "AI Act" => component.Type.Contains("llm", StringComparison.OrdinalIgnoreCase) ? "High" : "Medium",
+            "GDPR" => hasPersonalFlow || component.DataSensitivityLevel.Contains("high", StringComparison.OrdinalIgnoreCase) ? "High" : "Low",
+            "NIS2" => component.TrustZone.Contains("external", StringComparison.OrdinalIgnoreCase) ? "High" : "Medium",
+            "Access Control" => component.IsExternal ? "High" : "Medium",
+            "Monitoring" => component.Type.Contains("logging", StringComparison.OrdinalIgnoreCase) ? "Compliant" : "Medium",
+            "Incident Response" => component.TrustZone.Contains("external", StringComparison.OrdinalIgnoreCase) ? "High" : "Medium",
+            "Personal Data" => hasPersonalFlow ? "High" : "Low",
+            "International Transfers" => _inventory.DataItems.Any(x => x.TransferOutsideEu) || hasExternalVendor ? "High" : "Low",
+            "Retention" => _architecture.Stores.Any(store => store.ComponentId == component.Id && store.RetentionDays > 3650) ? "Medium" : "Compliant",
+            _ => "Low"
+        };
+    }
+
+    private static string ToRiskPillClass(string severity)
+        => severity switch
+        {
+            "Critical" => "danger",
+            "High" => "danger",
+            "Medium" => "warning",
+            "Compliant" => "success",
+            _ => "info"
+        };
+
+    private string GetRiskTooltip(string componentName, string severity)
+        => $"{componentName} is currently evaluated as {severity} under {_riskPerspective} perspective.";
+
+    private IEnumerable<string> GetRiskJustifications(RiskMatrixRow row)
+    {
+        yield return "Triggered policy references: AI_ACT.CLASSIFICATION, GDPR.DPIA.TRIGGER, NIS2.BASELINE.CONTROLS.";
+        yield return "Risk reflects current architecture sensitivity, transfer patterns, and external trust boundaries.";
+        yield return $"Evidence gaps currently open: {_evidenceGaps.TotalGaps}. Add evidence links to reduce exposure.";
+    }
+
+    private static string MapPriorityToSeverity(string priority)
+        => priority switch
+        {
+            "Critical" => "Critical",
+            "High" => "High",
+            "Medium" => "Medium",
+            "Low" => "Low",
+            _ => "Low"
+        };
+
+    private int GetActionImpactScore(Normyx.Web.Models.ActionItemDto action)
+    {
+        var priorityScore = action.Priority switch
+        {
+            "Critical" => 45,
+            "High" => 35,
+            "Medium" => 22,
+            _ => 12
+        };
+
+        var evidenceScore = GetActionEvidencePercent(action) >= 100 ? -8 : 10;
+        var dueDateScore = action.DueDate is null
+            ? 6
+            : action.DueDate <= DateTimeOffset.UtcNow.AddDays(7) ? 12 : 4;
+
+        return Math.Clamp(priorityScore + evidenceScore + dueDateScore, 1, 100);
+    }
+
+    private int GetActionRiskReduction(Normyx.Web.Models.ActionItemDto action)
+        => action.Priority switch
+        {
+            "Critical" => 40,
+            "High" => 32,
+            "Medium" => 20,
+            _ => 12
+        };
+
+    private int GetActionEvidencePercent(Normyx.Web.Models.ActionItemDto action)
+    {
+        var linked = _evidenceMap.Actions.FirstOrDefault(x => x.TargetId == action.Id)?.Evidence.Count ?? 0;
+        if (linked <= 0)
+        {
+            return 0;
+        }
+
+        return linked >= 2 ? 100 : 50;
+    }
+
+    private static string GetOwnerAvatar(string ownerRole)
+    {
+        if (string.IsNullOrWhiteSpace(ownerRole))
+        {
+            return "NA";
+        }
+
+        var parts = ownerRole.Split(' ', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
+        if (parts.Length == 1)
+        {
+            return parts[0].Length <= 2 ? parts[0].ToUpperInvariant() : parts[0][..2].ToUpperInvariant();
+        }
+
+        return string.Concat(parts.Select(p => p[0])).ToUpperInvariant();
     }
 
     private string GetRiskCellClass(int index)
@@ -1242,6 +1571,39 @@ else
         => _architecture.Flows
             .Where(flow => !_showPersonalDataOnly || IsPersonalDataFlow(flow))
             .Where(flow => !_showHighRiskFlowsOnly || IsHighRiskFlow(flow));
+
+    private bool HasVendorDependency(Normyx.Web.Models.ComponentDto component)
+        => component.IsExternal ||
+           _inventory.Vendors.Any(vendor =>
+               component.Name.Contains(vendor.Name, StringComparison.OrdinalIgnoreCase) ||
+               component.Type.Contains(vendor.ServiceType, StringComparison.OrdinalIgnoreCase));
+
+    private IEnumerable<DataFlowMatrixRow> GetDataFlowMatrixRows()
+        => _architecture.Components
+            .OrderBy(component => component.Name)
+            .Select(component =>
+            {
+                var outbound = _architecture.Flows.Where(flow => flow.FromComponentId == component.Id).ToList();
+                var inbound = _architecture.Flows.Where(flow => flow.ToComponentId == component.Id).ToList();
+                var sensitive = outbound.Concat(inbound)
+                    .SelectMany(flow => flow.DataCategories)
+                    .Where(category => category.Contains("personal", StringComparison.OrdinalIgnoreCase) ||
+                                       category.Contains("financial", StringComparison.OrdinalIgnoreCase) ||
+                                       category.Contains("special", StringComparison.OrdinalIgnoreCase))
+                    .Distinct(StringComparer.OrdinalIgnoreCase)
+                    .ToArray();
+
+                var risk = sensitive.Length > 0 || !outbound.Concat(inbound).All(flow => flow.EncryptionInTransit)
+                    ? "High"
+                    : HasVendorDependency(component) ? "Medium" : "Low";
+
+                return new DataFlowMatrixRow(
+                    component.Name,
+                    outbound.Count,
+                    inbound.Count,
+                    sensitive.Length == 0 ? ["none"] : sensitive,
+                    risk);
+            });
 
     private string GetFlowRiskClass(Normyx.Web.Models.DataFlowDto flow)
     {
@@ -1342,6 +1704,9 @@ else
         public string Format { get; set; } = "pdf";
         public bool SendWebhook { get; set; }
     }
+
+    private sealed record RiskMatrixRow(Guid ComponentId, string ComponentName, IReadOnlyList<string> Severities);
+    private sealed record DataFlowMatrixRow(string ComponentName, int Outbound, int Inbound, IReadOnlyList<string> SensitiveCategories, string Risk);
 
     private sealed class NewComponentForm
     {

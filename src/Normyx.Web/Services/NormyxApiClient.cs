@@ -113,13 +113,18 @@ public class NormyxApiClient(IHttpClientFactory factory, AuthSession session, IJ
         }
 
         response.Dispose();
-        var refreshed = await TryRefreshSessionAsync(cancellationToken);
-        if (!refreshed)
+        var refreshResult = await TryRefreshSessionAsync(cancellationToken);
+        if (refreshResult == RefreshSessionResult.Refreshed)
+        {
+            return await SendAsync(requestFactory, withAuth, cancellationToken);
+        }
+
+        if (refreshResult == RefreshSessionResult.Expired)
         {
             throw new UnauthorizedAccessException("Session expired. Please sign in again.");
         }
 
-        return await SendAsync(requestFactory, withAuth, cancellationToken);
+        throw new HttpRequestException("Session refresh failed due to a temporary service issue. Retry in a moment.");
     }
 
     private async Task<HttpResponseMessage> SendAsync(
@@ -132,12 +137,12 @@ public class NormyxApiClient(IHttpClientFactory factory, AuthSession session, IJ
         return await Client.SendAsync(request, cancellationToken);
     }
 
-    private async Task<bool> TryRefreshSessionAsync(CancellationToken cancellationToken)
+    private async Task<RefreshSessionResult> TryRefreshSessionAsync(CancellationToken cancellationToken)
     {
         if (string.IsNullOrWhiteSpace(session.RefreshToken) || session.RefreshTokenExpiresAt <= DateTimeOffset.UtcNow)
         {
             await SafeClearSessionAsync();
-            return false;
+            return RefreshSessionResult.Expired;
         }
 
         var existingAccessToken = session.AccessToken;
@@ -146,37 +151,57 @@ public class NormyxApiClient(IHttpClientFactory factory, AuthSession session, IJ
         {
             if (!string.Equals(existingAccessToken, session.AccessToken, StringComparison.Ordinal))
             {
-                return true;
+                return RefreshSessionResult.Refreshed;
             }
 
             if (string.IsNullOrWhiteSpace(session.RefreshToken) || session.RefreshTokenExpiresAt <= DateTimeOffset.UtcNow)
             {
                 await SafeClearSessionAsync();
-                return false;
+                return RefreshSessionResult.Expired;
             }
 
-            using var refreshRequest = new HttpRequestMessage(HttpMethod.Post, "/auth/refresh")
+            try
             {
-                Content = BuildJsonContent(new { refreshToken = session.RefreshToken })
-            };
+                using var refreshRequest = new HttpRequestMessage(HttpMethod.Post, "/auth/refresh")
+                {
+                    Content = BuildJsonContent(new { refreshToken = session.RefreshToken })
+                };
 
-            using var refreshResponse = await Client.SendAsync(refreshRequest, cancellationToken);
-            if (!refreshResponse.IsSuccessStatusCode)
-            {
-                await SafeClearSessionAsync();
-                return false;
+                using var refreshResponse = await Client.SendAsync(refreshRequest, cancellationToken);
+                if (!refreshResponse.IsSuccessStatusCode)
+                {
+                    if (refreshResponse.StatusCode is HttpStatusCode.Unauthorized or HttpStatusCode.Forbidden)
+                    {
+                        await SafeClearSessionAsync();
+                        return RefreshSessionResult.Expired;
+                    }
+
+                    return RefreshSessionResult.TransientFailure;
+                }
+
+                var refreshed = await refreshResponse.Content.ReadFromJsonAsync<Normyx.Web.Models.AuthResponse>(JsonOptions, cancellationToken);
+                if (refreshed is null || string.IsNullOrWhiteSpace(refreshed.AccessToken) || string.IsNullOrWhiteSpace(refreshed.RefreshToken))
+                {
+                    await SafeClearSessionAsync();
+                    return RefreshSessionResult.Expired;
+                }
+
+                session.SetSession(session.TenantName, session.Email, refreshed.AccessToken, refreshed.RefreshToken, refreshed.RefreshTokenExpiresAt);
+                await session.PersistAsync(jsRuntime);
+                return RefreshSessionResult.Refreshed;
             }
-
-            var refreshed = await refreshResponse.Content.ReadFromJsonAsync<Normyx.Web.Models.AuthResponse>(JsonOptions, cancellationToken);
-            if (refreshed is null || string.IsNullOrWhiteSpace(refreshed.AccessToken) || string.IsNullOrWhiteSpace(refreshed.RefreshToken))
+            catch (HttpRequestException)
             {
-                await SafeClearSessionAsync();
-                return false;
+                return RefreshSessionResult.TransientFailure;
             }
-
-            session.SetSession(session.TenantName, session.Email, refreshed.AccessToken, refreshed.RefreshToken, refreshed.RefreshTokenExpiresAt);
-            await session.PersistAsync(jsRuntime);
-            return true;
+            catch (TaskCanceledException)
+            {
+                return RefreshSessionResult.TransientFailure;
+            }
+            catch (JsonException)
+            {
+                return RefreshSessionResult.TransientFailure;
+            }
         }
         finally
         {
@@ -195,7 +220,19 @@ public class NormyxApiClient(IHttpClientFactory factory, AuthSession session, IJ
             session.Clear();
         }
 
-        navigationManager.NavigateTo("/login");
+        TryNavigateToLogin();
+    }
+
+    private void TryNavigateToLogin()
+    {
+        try
+        {
+            navigationManager.NavigateTo("/login", replace: true);
+        }
+        catch (NavigationException)
+        {
+            // In server-side redirect scenarios Blazor can throw NavigationException intentionally.
+        }
     }
 
     private static async Task EnsureSuccess(HttpResponseMessage response)
@@ -206,26 +243,34 @@ public class NormyxApiClient(IHttpClientFactory factory, AuthSession session, IJ
         }
 
         var body = await response.Content.ReadAsStringAsync();
-        var errorMessage = TryExtractApiError(body);
+        var parsed = TryExtractApiError(body);
+        var errorMessage = string.IsNullOrWhiteSpace(parsed.CorrelationId)
+            ? parsed.Message
+            : $"{parsed.Message} (corr:{parsed.CorrelationId})";
         throw new HttpRequestException($"API call failed ({(int)response.StatusCode}): {errorMessage}");
     }
 
-    private static string TryExtractApiError(string body)
+    private static ApiErrorParse TryExtractApiError(string body)
     {
         if (string.IsNullOrWhiteSpace(body))
         {
-            return "No error payload returned.";
+            return new ApiErrorParse("No error payload returned.", null);
         }
 
         try
         {
             using var document = JsonDocument.Parse(body);
+            var correlationId = document.RootElement.TryGetProperty("correlationId", out var correlationProp)
+                ? correlationProp.GetString()
+                : null;
+
             if (document.RootElement.TryGetProperty("error", out var error))
             {
                 var code = error.TryGetProperty("code", out var codeProp) ? codeProp.GetString() : null;
                 var message = error.TryGetProperty("message", out var messageProp) ? messageProp.GetString() : null;
                 var text = string.IsNullOrWhiteSpace(message) ? body : message;
-                return string.IsNullOrWhiteSpace(code) ? text! : $"{code}: {text}";
+                var formatted = string.IsNullOrWhiteSpace(code) ? text! : $"{code}: {text}";
+                return new ApiErrorParse(formatted, correlationId);
             }
         }
         catch
@@ -233,6 +278,15 @@ public class NormyxApiClient(IHttpClientFactory factory, AuthSession session, IJ
             // Non-JSON payload; return raw response body.
         }
 
-        return body;
+        return new ApiErrorParse(body, null);
+    }
+
+    private sealed record ApiErrorParse(string Message, string? CorrelationId);
+
+    private enum RefreshSessionResult
+    {
+        Refreshed,
+        Expired,
+        TransientFailure
     }
 }

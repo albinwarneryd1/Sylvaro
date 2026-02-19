@@ -1,4 +1,5 @@
-﻿<!DOCTYPE html>
+@inject NavigationManager Nav
+<!DOCTYPE html>
 <html lang="en">
 
 <head>
@@ -17,11 +18,13 @@
         <ChildContent>
             <Routes @rendermode="PageRenderMode" />
         </ChildContent>
-        <ErrorContent>
-            <div class="card-shell">
-                <h2>Workspace temporarily unavailable</h2>
-                <p>An unexpected rendering fault was captured. Reload to recover the interactive session.</p>
-                <a class="btn-main" href=".">Reload Workspace</a>
+        <ErrorContent Context="exception">
+            <div class="card-shell" style="max-width:960px; margin:1rem auto;">
+                <EnterpriseErrorPanel
+                    ErrorText="@exception.ToString()"
+                    FriendlyMessage="An application rendering error occurred."
+                    RetryLabel="Reload Workspace"
+                    OnRetry="ReloadWorkspaceAsync" />
             </div>
         </ErrorContent>
     </ErrorBoundary>
@@ -32,4 +35,17 @@
 
 @code {
     private static readonly InteractiveServerRenderMode PageRenderMode = new(prerender: false);
+
+    private Task ReloadWorkspaceAsync()
+    {
+        try
+        {
+            Nav.NavigateTo(Nav.Uri, forceLoad: true);
+        }
+        catch (NavigationException)
+        {
+            // Blazor can throw this as a control-flow signal in redirect scenarios.
+        }
+        return Task.CompletedTask;
+    }
 }

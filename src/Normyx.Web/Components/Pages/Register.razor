@@ -12,7 +12,7 @@
 
     @if (!string.IsNullOrWhiteSpace(_error))
     {
-        <div class="alert-danger">@_error</div>
+        <EnterpriseErrorPanel ErrorText="@_error" FriendlyMessage="Tenant registration failed." />
     }
 
     <EditForm FormName="register-form" Model="_model" OnValidSubmit="OnSubmitAsync">
@@ -64,7 +64,7 @@
 
             Session.SetSession(_model.TenantName, _model.Email, response.AccessToken, response.RefreshToken, response.RefreshTokenExpiresAt);
             await Session.PersistAsync(JsRuntime);
-            Nav.NavigateTo("/");
+            NavigateHome();
         }
         catch (Exception ex)
         {
@@ -73,6 +73,18 @@
         finally
         {
             _loading = false;
+        }
+    }
+
+    private void NavigateHome()
+    {
+        try
+        {
+            Nav.NavigateTo("/", replace: true);
+        }
+        catch (NavigationException)
+        {
+            // Blazor can throw this as a control-flow signal in redirect scenarios.
         }
     }
 

@@ -57,7 +57,7 @@ else
 
         @if (!string.IsNullOrWhiteSpace(_error))
         {
-            <div class="alert-danger" style="margin-top: 0.75rem;">@_error</div>
+            <EnterpriseErrorPanel ErrorText="@_error" FriendlyMessage="Audit ledger query failed." OnRetry="RefreshAsync" />
         }
     </div>
 
@@ -132,6 +132,7 @@ else
     private string _viewMode = "Table";
     private bool _regulatorView = true;
     private bool _exporting;
+    private bool _attemptedInitialLoad;
 
     private int _signedEventCount;
 
@@ -153,7 +154,20 @@ else
             return;
         }
 
+        _attemptedInitialLoad = true;
         await RefreshAsync();
+    }
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (_attemptedInitialLoad || !Session.IsInitialized || !Session.IsAuthenticated)
+        {
+            return;
+        }
+
+        _attemptedInitialLoad = true;
+        await RefreshAsync();
+        await InvokeAsync(StateHasChanged);
     }
 
     private async Task RefreshAsync()

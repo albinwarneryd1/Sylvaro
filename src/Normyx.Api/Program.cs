@@ -4,6 +4,7 @@ using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.IdentityModel.Tokens;
 using Microsoft.OpenApi.Models;
+using Normyx.Api.Configuration;
 using Normyx.Api.Contracts.Errors;
 using Normyx.Api.Middleware;
 using Normyx.Api.Endpoints;
@@ -97,6 +98,23 @@ builder.Services.AddProblemDetails();
 builder.Services.AddRateLimiter(options =>
 {
     options.RejectionStatusCode = StatusCodes.Status429TooManyRequests;
+    options.OnRejected = async (context, cancellationToken) =>
+    {
+        var httpContext = context.HttpContext;
+        var retryAfterSeconds = context.Lease.TryGetMetadata(MetadataName.RetryAfter, out var retryAfter)
+            ? Math.Max(1, (int)Math.Ceiling(retryAfter.TotalSeconds))
+            : (int)ApiRateLimitPolicy.Window.TotalSeconds;
+        var correlationId = httpContext.Items.TryGetValue(CorrelationIdMiddleware.HttpContextItemKey, out var value)
+            ? value?.ToString() ?? httpContext.TraceIdentifier
+            : httpContext.TraceIdentifier;
+
+        httpContext.Response.StatusCode = StatusCodes.Status429TooManyRequests;
+        httpContext.Response.ContentType = "application/json";
+        httpContext.Response.Headers["Retry-After"] = retryAfterSeconds.ToString();
+        var payload = new ApiErrorEnvelope(correlationId, new ApiErrorDetail("rate_limited", $"Too many requests. Retry after {retryAfterSeconds} seconds."));
+        await httpContext.Response.WriteAsJsonAsync(payload, cancellationToken);
+    };
+
     options.GlobalLimiter = PartitionedRateLimiter.Create<HttpContext, string>(context =>
     {
         var key = context.Connection.RemoteIpAddress?.ToString() ?? "unknown";
@@ -104,8 +122,8 @@ builder.Services.AddRateLimiter(options =>
             key,
             _ => new FixedWindowRateLimiterOptions
             {
-                PermitLimit = 200,
-                Window = TimeSpan.FromMinutes(1),
+                PermitLimit = ApiRateLimitPolicy.GlobalPermitLimitPerMinute,
+                Window = ApiRateLimitPolicy.Window,
                 QueueProcessingOrder = QueueProcessingOrder.OldestFirst,
                 QueueLimit = 0
             });
@@ -118,8 +136,8 @@ builder.Services.AddRateLimiter(options =>
             $"auth:{key}",
             _ => new FixedWindowRateLimiterOptions
             {
-                PermitLimit = 20,
-                Window = TimeSpan.FromMinutes(1),
+                PermitLimit = ApiRateLimitPolicy.AuthPermitLimitPerMinute,
+                Window = ApiRateLimitPolicy.Window,
                 QueueProcessingOrder = QueueProcessingOrder.OldestFirst,
                 QueueLimit = 0
             });

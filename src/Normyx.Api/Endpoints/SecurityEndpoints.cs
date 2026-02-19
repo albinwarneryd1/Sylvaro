@@ -3,6 +3,7 @@ using System.Security.Cryptography;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
+using Normyx.Api.Configuration;
 using Normyx.Application.Abstractions;
 using Normyx.Application.Security;
 using Normyx.Infrastructure.Persistence;
@@ -21,6 +22,7 @@ public static class SecurityEndpoints
         group.MapGet("/sessions", ListSessionsAsync);
         group.MapDelete("/sessions/{sessionId:guid}", RevokeSessionAsync);
         group.MapPost("/sessions/revoke-others", RevokeOtherSessionsAsync);
+        group.MapGet("/rate-limit-policy", GetRateLimitPolicy);
         group.MapGet("/api-tokens", ListApiTokensAsync).RequireAuthorization(new AuthorizeAttribute { Roles = RoleNames.Admin });
         group.MapPost("/api-tokens", CreateApiTokenAsync).RequireAuthorization(new AuthorizeAttribute { Roles = RoleNames.Admin });
         group.MapDelete("/api-tokens/{tokenId:guid}", RevokeApiTokenAsync).RequireAuthorization(new AuthorizeAttribute { Roles = RoleNames.Admin });
@@ -83,6 +85,13 @@ public static class SecurityEndpoints
 
         return updated == 0 ? Results.NotFound() : Results.NoContent();
     }
+
+    private static IResult GetRateLimitPolicy()
+        => Results.Ok(new RateLimitPolicyDto(
+            ApiRateLimitPolicy.GlobalPermitLimitPerMinute,
+            ApiRateLimitPolicy.AuthPermitLimitPerMinute,
+            (int)ApiRateLimitPolicy.Window.TotalSeconds,
+            true));
 
     private static async Task<IResult> RevokeOtherSessionsAsync(
         [FromBody] RevokeOtherSessionsRequest request,
@@ -216,6 +225,11 @@ public static class SecurityEndpoints
     private sealed record CreateApiTokenRequest(
         [property: Required, StringLength(120, MinimumLength = 3)] string Name,
         [property: Required, StringLength(120, MinimumLength = 3)] string Scope);
+    private sealed record RateLimitPolicyDto(
+        int GlobalPermitLimitPerMinute,
+        int AuthPermitLimitPerMinute,
+        int WindowSeconds,
+        bool IsActive);
 
     // Keeps hashing logic aligned with auth token storage without exposing auth internals as a public API.
     private static class AuthEndpointsHashShim

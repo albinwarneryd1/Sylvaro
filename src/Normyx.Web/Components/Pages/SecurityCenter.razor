@@ -23,6 +23,8 @@ else
             <span class="risk-pill info">MFA Status: Planned</span>
             <span class="risk-pill success">Password Policy: Enforced</span>
             <span class="risk-pill warning">Active Sessions: @_activeSessions.Count</span>
+            <span class="risk-pill info">Available Roles: @_roles.Count</span>
+            <span class="@($"risk-pill {(_rateLimitPolicy?.IsActive == true ? "success" : "warning")}")">Rate Limiting: @(_rateLimitPolicy?.IsActive == true ? "Active" : "Unavailable")</span>
         </div>
     </div>
 
@@ -44,7 +46,7 @@ else
             }
             @if (!string.IsNullOrWhiteSpace(_error))
             {
-                <div class="alert-danger">@_error</div>
+                <EnterpriseErrorPanel ErrorText="@_error" FriendlyMessage="Security operation failed." OnRetry="RetrySecurityAsync" />
             }
             <table class="table-shell">
                 <thead><tr><th>Session</th><th>IP</th><th>User Agent</th><th>Started</th><th>Expires</th><th>Status</th><th></th></tr></thead>
@@ -88,6 +90,23 @@ else
                 <li>Complexity rule: upper/lower/number/symbol</li>
                 <li>Rotation policy: every 90 days for admin users</li>
                 <li>Audit events: login success/failure + token lifecycle</li>
+            </ul>
+        </section>
+
+        <section class="card-shell">
+            <h2>Role & API Protection Overview</h2>
+            <ul>
+                @foreach (var role in _roles)
+                {
+                    <li>@role.Name</li>
+                }
+            </ul>
+            <h3>Rate Limiting Policy</h3>
+            <ul>
+                <li>Global API quota: @(_rateLimitPolicy?.GlobalPermitLimitPerMinute ?? 200) requests / minute per client IP</li>
+                <li>Authentication endpoints: @(_rateLimitPolicy?.AuthPermitLimitPerMinute ?? 20) requests / minute per client IP</li>
+                <li>Evaluation window: @(_rateLimitPolicy?.WindowSeconds ?? 60) seconds</li>
+                <li>429 responses are audited with correlation IDs</li>
             </ul>
         </section>
 
@@ -163,6 +182,9 @@ else
 
     private List<Normyx.Web.Models.SecuritySessionDto> _activeSessions = [];
     private List<Normyx.Web.Models.ApiTokenDto> _tokens = [];
+    private List<Normyx.Web.Models.RoleDto> _roles = [];
+    private Normyx.Web.Models.RateLimitPolicyDto? _rateLimitPolicy;
+    private bool _attemptedInitialLoad;
 
     protected override async Task OnInitializedAsync()
     {
@@ -171,8 +193,26 @@ else
             return;
         }
 
+        _attemptedInitialLoad = true;
         await RefreshSessionsAsync();
         await RefreshApiTokensAsync();
+        await LoadRolesAsync();
+        await LoadRateLimitPolicyAsync();
+    }
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (_attemptedInitialLoad || !Session.IsInitialized || !Session.IsAuthenticated)
+        {
+            return;
+        }
+
+        _attemptedInitialLoad = true;
+        await RefreshSessionsAsync();
+        await RefreshApiTokensAsync();
+        await LoadRolesAsync();
+        await LoadRateLimitPolicyAsync();
+        await InvokeAsync(StateHasChanged);
     }
 
     private async Task RefreshSessionsAsync()
@@ -211,6 +251,30 @@ else
         finally
         {
             _loadingTokens = false;
+        }
+    }
+
+    private async Task LoadRolesAsync()
+    {
+        try
+        {
+            _roles = (await Api.GetAsync<List<Normyx.Web.Models.RoleDto>>("/tenants/roles")) ?? [];
+        }
+        catch (Exception ex)
+        {
+            _error = ex.Message;
+        }
+    }
+
+    private async Task LoadRateLimitPolicyAsync()
+    {
+        try
+        {
+            _rateLimitPolicy = await Api.GetAsync<Normyx.Web.Models.RateLimitPolicyDto>("/security/rate-limit-policy");
+        }
+        catch (Exception ex)
+        {
+            _error = ex.Message;
         }
     }
 
@@ -331,5 +395,13 @@ else
         }
 
         return userAgent.Length <= 72 ? userAgent : $"{userAgent[..72]}...";
+    }
+
+    private async Task RetrySecurityAsync()
+    {
+        await RefreshSessionsAsync();
+        await RefreshApiTokensAsync();
+        await LoadRolesAsync();
+        await LoadRateLimitPolicyAsync();
     }
 }

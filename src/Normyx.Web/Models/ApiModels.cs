@@ -70,3 +70,4 @@ public record PolicyPackSelectionDto(Guid Id, string Name, string Version, strin
 public record SecuritySessionDto(Guid Id, string SessionRef, string Ip, string UserAgent, DateTimeOffset CreatedAt, DateTimeOffset ExpiresAt);
 public record ApiTokenDto(Guid Id, string Name, string Scope, string TokenPrefix, Guid CreatedByUserId, DateTimeOffset CreatedAt, DateTimeOffset? RevokedAt);
 public record ApiTokenCreateResult(Guid Id, string Name, string Scope, string TokenPrefix, Guid CreatedByUserId, DateTimeOffset CreatedAt, string TokenValue);
+public record RateLimitPolicyDto(int GlobalPermitLimitPerMinute, int AuthPermitLimitPerMinute, int WindowSeconds, bool IsActive);

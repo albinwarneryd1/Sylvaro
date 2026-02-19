@@ -25,25 +25,37 @@ else
 {
     <div class="section-head">
         <div>
-            <h1>Executive Compliance Overview</h1>
-            <p>Board-ready posture across EU AI Act, GDPR, and NIS2 obligations.</p>
+            <h1>Executive Regulatory Posture Overview</h1>
+            <p>Board-ready posture across EU AI Act, GDPR, NIS2, supplier controls, and evidence coverage.</p>
         </div>
-        <div class="status-line">
-            <span class="risk-pill info">Last Audit Event: @(_latestAudit?.ActionType ?? "N/A")</span>
-            <span class="risk-pill info">Last Assessment Version: @_latestVersionLabel</span>
-            <span class="risk-pill success">Signed-off By: @_latestSignoff</span>
+        <div>
+            <div class="status-line">
+                <span class="risk-pill info">Last Audit Event: @(_latestAudit?.ActionType ?? "N/A")</span>
+                <span class="risk-pill info">Last Assessment Version: @_latestVersionLabel</span>
+                <span class="risk-pill success">Signed-off By: @_latestSignoff</span>
+            </div>
+            <div class="btn-row" style="justify-content:flex-end; margin-bottom:0;">
+                <button class="btn-small" @onclick="ExportBoardSummaryAsync" disabled="@_exporting || _latestVersionId is null">@(_exporting ? "Exporting..." : "Board Summary Export")</button>
+                <button class="btn-main secondary" @onclick="ExportRegulatoryReportAsync" disabled="@_exporting || _latestVersionId is null">Regulatory Report Export</button>
+            </div>
         </div>
     </div>
 
     @if (!string.IsNullOrWhiteSpace(_error))
     {
-        <div class="alert-danger">@_error</div>
+        <EnterpriseErrorPanel ErrorText="@_error" FriendlyMessage="Executive dashboard loading failed." OnRetry="LoadOverviewAsync" />
+    }
+
+    @if (!string.IsNullOrWhiteSpace(_exportMessage))
+    {
+        <div class="risk-pill success" style="margin-bottom:0.8rem;">@_exportMessage</div>
     }
 
     <div class="panel-grid">
         <section class="metric-card panel-span-4">
             <h3>Compliance Score</h3>
             <p>@ComplianceScore / 100</p>
+            <div class="score-meter"><i style="@($"width:{ComplianceScore}%")"></i></div>
         </section>
         <section class="metric-card panel-span-4">
             <h3>AI Act Risk Class</h3>
@@ -58,27 +70,63 @@ else
             <p><span class="@($"risk-pill {Nis2Style}")">@Nis2Applicability</span></p>
         </section>
         <section class="metric-card panel-span-4">
+            <h3>Critical Control Deficiencies</h3>
+            <p>@OpenCriticalActions</p>
+        </section>
+        <section class="metric-card panel-span-4">
             <h3>Outstanding Compliance Obligations</h3>
             <p>@OutstandingActions</p>
         </section>
-        <section class="metric-card panel-span-4">
-            <h3>Open Critical Actions</h3>
-            <p>@OpenCriticalActions</p>
-        </section>
 
-        <section class="card-shell panel-span-6">
-            <h2>Risk Heatmap by Component</h2>
-            <p class="muted">Component-level view across policy dimensions.</p>
-            <div class="heatmap">
-                @foreach (var level in RiskHeatLevels)
+        <section class="card-shell panel-span-4">
+            <h2>Risk Distribution</h2>
+            <p class="context-text">Interactive severity distribution for latest assessment context.</p>
+            <div class="donut-chart">
+                <div class="donut-center">@RiskTotal</div>
+            </div>
+            <div class="legend-grid">
+                @foreach (var bucket in RiskLegend)
                 {
-                    <div class="@($"heat-cell {level}")"></div>
+                    <div class="legend-item @bucket.CssClass" title="@bucket.Label">
+                        <span><i></i>@bucket.Label</span>
+                        <strong>@bucket.Count</strong>
+                    </div>
                 }
             </div>
         </section>
 
-        <section class="card-shell panel-span-3">
-            <h2>Data Category Exposure</h2>
+        <section class="card-shell panel-span-8">
+            <h2>Risk Heatmap by Component</h2>
+            <p class="context-text">Rows represent architecture components. Columns represent regulatory domains.</p>
+            <table class="table-shell">
+                <thead>
+                    <tr>
+                        <th>Component</th>
+                        <th>AI Act</th>
+                        <th>GDPR</th>
+                        <th>Security</th>
+                        <th>Vendor</th>
+                        <th>Operational</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    @foreach (var row in _componentRiskRows)
+                    {
+                        <tr>
+                            <td>@row.Component</td>
+                            <td><span class="@($"risk-pill {ToRiskPill(row.AiAct)}")">@row.AiAct</span></td>
+                            <td><span class="@($"risk-pill {ToRiskPill(row.Gdpr)}")">@row.Gdpr</span></td>
+                            <td><span class="@($"risk-pill {ToRiskPill(row.Security)}")">@row.Security</span></td>
+                            <td><span class="@($"risk-pill {ToRiskPill(row.Vendor)}")">@row.Vendor</span></td>
+                            <td><span class="@($"risk-pill {ToRiskPill(row.Operational)}")">@row.Operational</span></td>
+                        </tr>
+                    }
+                </tbody>
+            </table>
+        </section>
+
+        <section class="card-shell panel-span-4">
+            <h2>Data Sensitivity Summary</h2>
             @if (_dataCategorySummary.Count == 0)
             {
                 <p>No inventory data available.</p>
@@ -94,8 +142,8 @@ else
             }
         </section>
 
-        <section class="card-shell panel-span-3">
-            <h2>Supplier Risk Distribution</h2>
+        <section class="card-shell panel-span-4">
+            <h2>Vendor Exposure Overview</h2>
             <ul>
                 <li>Vendors with DPA: @_vendorWithDpa</li>
                 <li>Vendors missing DPA: @_vendorWithoutDpa</li>
@@ -103,8 +151,14 @@ else
             </ul>
         </section>
 
+        <section class="card-shell panel-span-4">
+            <h2>Regulatory Readiness Indicator</h2>
+            <p class="metric-value">@ReadinessLevel</p>
+            <p class="context-text">Readiness is based on open obligations, critical deficiencies, and signed-off actions.</p>
+        </section>
+
         <section class="card-shell panel-span-6">
-            <h2>Compliance Trend Over Time</h2>
+            <h2>Compliance Trend</h2>
             <div class="trend-bars">
                 @if (_trendBars.Count == 0)
                 {
@@ -125,37 +179,40 @@ else
         </section>
 
         <section class="card-shell panel-span-3">
-            <h2>Last Assessment Summary</h2>
-            <ul>
-                <li>System: @_primarySystemName</li>
-                <li>Assessments: @_assessmentCount</li>
-                <li>Findings: @_latestFindingsCount</li>
-                <li>Actions: @_actions.Count</li>
-            </ul>
-        </section>
-
-        <section class="card-shell panel-span-3">
-            <h2>Upcoming Deadlines</h2>
-            @if (_upcomingDeadlines.Count == 0)
+            <h2>Assessment Timeline</h2>
+            @if (_assessmentTimeline.Count == 0)
             {
-                <p>No due dates assigned.</p>
+                <p>No assessments executed.</p>
             }
             else
             {
                 <ul>
-                    @foreach (var due in _upcomingDeadlines)
+                    @foreach (var item in _assessmentTimeline)
                     {
-                        <li>@due.Title (@due.DueDate?.ToString("yyyy-MM-dd"))</li>
+                        <li>@item.RanAt.ToString("yyyy-MM-dd") - @item.Provider</li>
                     }
                 </ul>
             }
+        </section>
+
+        <section class="card-shell panel-span-3">
+            <h2>Latest Governance Snapshot</h2>
+            <ul>
+                <li>Primary system: @_primarySystemName</li>
+                <li>Assessments: @_assessmentCount</li>
+                <li>Findings: @_latestFindingsCount</li>
+                <li>Upcoming deadlines: @_upcomingDeadlines.Count</li>
+            </ul>
         </section>
     </div>
 }
 
 @code {
     private bool _loading = true;
+    private bool _exporting;
+    private bool _attemptedInitialLoad;
     private string _error = string.Empty;
+    private string _exportMessage = string.Empty;
 
     private Normyx.Web.Models.DashboardTenantDto? _dashboard;
     private Normyx.Web.Models.DashboardSystemDto? _systemDashboard;
@@ -169,6 +226,8 @@ else
     private List<KeyValuePair<string, int>> _dataCategorySummary = [];
     private List<TrendPoint> _trendBars = [];
     private List<Normyx.Web.Models.ActionItemDto> _upcomingDeadlines = [];
+    private List<AssessmentTimelineItem> _assessmentTimeline = [];
+    private List<ComponentRiskRow> _componentRiskRows = [];
 
     private int _vendorWithDpa;
     private int _vendorWithoutDpa;
@@ -178,10 +237,12 @@ else
     private string _primarySystemName = "N/A";
     private string _latestVersionLabel = "N/A";
     private string _latestSignoff = "Pending";
+    private Guid? _latestVersionId;
 
     private int ComplianceScore => _trendBars.LastOrDefault()?.Score ?? 0;
     private int OutstandingActions => _dashboard?.OpenActions ?? 0;
     private int OpenCriticalActions => _actions.Count(a => a.Priority.Equals("Critical", StringComparison.OrdinalIgnoreCase));
+    private int RiskTotal => (_dashboard?.RiskDistribution?.Values.Sum() ?? 0);
 
     private string AiActRiskClassLabel => _dashboard?.RiskDistribution.Keys.FirstOrDefault(x => x.Contains("high", StringComparison.OrdinalIgnoreCase))
         ?? _dashboard?.RiskDistribution.Keys.FirstOrDefault()
@@ -199,33 +260,23 @@ else
     private string Nis2Applicability => _inventory.Vendors.Any() ? "Applicable" : "Under Review";
     private string Nis2Style => _inventory.Vendors.Any() ? "warning" : "info";
 
-    private IEnumerable<string> RiskHeatLevels
+    private string ReadinessLevel
+        => OpenCriticalActions == 0 && OutstandingActions <= 3
+            ? "Regulator-Ready"
+            : OpenCriticalActions <= 2 && OutstandingActions <= 8
+                ? "Conditionally Ready"
+                : "Remediation Required";
+
+    private IEnumerable<RiskLegendBucket> RiskLegend
     {
         get
         {
-            var high = _dashboard?.RiskDistribution
-                .Where(x => x.Key.Contains("high", StringComparison.OrdinalIgnoreCase))
-                .Sum(x => x.Value) ?? 0;
-            var limited = _dashboard?.RiskDistribution
-                .Where(x => x.Key.Contains("limited", StringComparison.OrdinalIgnoreCase))
-                .Sum(x => x.Value) ?? 0;
-            var minimal = _dashboard?.RiskDistribution
-                .Where(x => x.Key.Contains("minimal", StringComparison.OrdinalIgnoreCase))
-                .Sum(x => x.Value) ?? 0;
-
-            var criticalCells = Math.Clamp(high, 0, 6);
-            var highCells = Math.Clamp(limited, 0, 6);
-            var mediumCells = Math.Clamp(minimal, 0, 6);
-            var cells = new List<string>();
-            cells.AddRange(Enumerable.Repeat("critical", criticalCells));
-            cells.AddRange(Enumerable.Repeat("high", highCells));
-            cells.AddRange(Enumerable.Repeat("medium", mediumCells));
-            while (cells.Count < 20)
-            {
-                cells.Add("low");
-            }
-
-            return cells.Take(20);
+            var distribution = _dashboard?.RiskDistribution ?? new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
+            yield return new RiskLegendBucket("Critical", "critical", CountKeys(distribution, "critical", "prohibited"));
+            yield return new RiskLegendBucket("High", "high", CountKeys(distribution, "high"));
+            yield return new RiskLegendBucket("Medium", "medium", CountKeys(distribution, "limited", "medium"));
+            yield return new RiskLegendBucket("Low", "low", CountKeys(distribution, "minimal", "low"));
+            yield return new RiskLegendBucket("Compliant", "compliant", Math.Max(0, _actions.Count(a => a.Status.Equals("Done", StringComparison.OrdinalIgnoreCase))));
         }
     }
 
@@ -237,7 +288,21 @@ else
             return;
         }
 
+        _attemptedInitialLoad = true;
         await LoadOverviewAsync();
+    }
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (_attemptedInitialLoad || !Session.IsInitialized || !Session.IsAuthenticated)
+        {
+            return;
+        }
+
+        _attemptedInitialLoad = true;
+        _loading = true;
+        await LoadOverviewAsync();
+        await InvokeAsync(StateHasChanged);
     }
 
     private async Task LoadOverviewAsync()
@@ -265,10 +330,18 @@ else
                 return;
             }
 
+            _latestVersionId = latestVersion.Id;
             _latestVersionLabel = $"v{latestVersion.VersionNumber}";
             _assessments = (await Api.GetAsync<List<Normyx.Web.Models.AssessmentListItem>>($"/versions/{latestVersion.Id}/assessments")) ?? [];
             _actions = (await Api.GetAsync<List<Normyx.Web.Models.ActionItemDto>>($"/actions/version/{latestVersion.Id}")) ?? [];
             _inventory = await Api.GetAsync<Normyx.Web.Models.InventoryResponse>($"/versions/{latestVersion.Id}/inventory") ?? new([], []);
+            var architecture = await Api.GetAsync<Normyx.Web.Models.ArchitectureResponse>($"/versions/{latestVersion.Id}/architecture") ?? new([], [], []);
+
+            _componentRiskRows = architecture.Components
+                .OrderBy(x => x.Name)
+                .Take(10)
+                .Select(component => BuildComponentRiskRow(component, architecture, _inventory))
+                .ToList();
 
             _dataCategorySummary = _inventory.DataItems
                 .GroupBy(x => x.DataCategory)
@@ -305,6 +378,12 @@ else
                 .TakeLast(6)
                 .Select(x => new TrendPoint(x.RanAt.ToString("MM-dd"), Math.Clamp(x.Score, 0, 100)))
                 .ToList();
+
+            _assessmentTimeline = _assessments
+                .OrderByDescending(x => x.RanAt)
+                .Take(6)
+                .Select(x => new AssessmentTimelineItem(x.RanAt, x.LlmProvider))
+                .ToList();
         }
         catch (Exception ex)
         {
@@ -316,5 +395,106 @@ else
         }
     }
 
+    private async Task ExportBoardSummaryAsync()
+        => await GenerateDashboardExportAsync("Board_Summary", "json");
+
+    private async Task ExportRegulatoryReportAsync()
+        => await GenerateDashboardExportAsync("Regulator_Export", "pdf");
+
+    private async Task GenerateDashboardExportAsync(string exportType, string format)
+    {
+        if (_latestVersionId is null)
+        {
+            return;
+        }
+
+        try
+        {
+            _exporting = true;
+            _error = string.Empty;
+            _exportMessage = string.Empty;
+
+            var result = await Api.PostAsync<DashboardExportResult>($"/exports/versions/{_latestVersionId.Value}/generate", new
+            {
+                exportType,
+                format,
+                sendWebhook = false
+            });
+
+            if (result is null)
+            {
+                _error = "Export generation did not return an artifact reference.";
+                return;
+            }
+
+            _exportMessage = $"Generated {result.ExportType} ({result.MimeType}) at {result.CreatedAt:yyyy-MM-dd HH:mm:ss} UTC.";
+        }
+        catch (Exception ex)
+        {
+            _error = ex.Message;
+        }
+        finally
+        {
+            _exporting = false;
+        }
+    }
+
+    private static int CountKeys(IReadOnlyDictionary<string, int> distribution, params string[] fragments)
+        => distribution
+            .Where(kvp => fragments.Any(fragment => kvp.Key.Contains(fragment, StringComparison.OrdinalIgnoreCase)))
+            .Sum(kvp => kvp.Value);
+
+    private static string ToRiskPill(string severity)
+        => severity switch
+        {
+            "Critical" => "danger",
+            "High" => "danger",
+            "Medium" => "warning",
+            "Low" => "info",
+            "Compliant" => "success",
+            _ => "info"
+        };
+
+    private static ComponentRiskRow BuildComponentRiskRow(
+        Normyx.Web.Models.ComponentDto component,
+        Normyx.Web.Models.ArchitectureResponse architecture,
+        Normyx.Web.Models.InventoryResponse inventory)
+    {
+        var hasSensitiveFlow = architecture.Flows.Any(flow =>
+            (flow.FromComponentId == component.Id || flow.ToComponentId == component.Id) &&
+            flow.DataCategories.Any(category =>
+                category.Contains("personal", StringComparison.OrdinalIgnoreCase) ||
+                category.Contains("financial", StringComparison.OrdinalIgnoreCase)));
+
+        var aiAct = component.Type.Contains("llm", StringComparison.OrdinalIgnoreCase) ||
+                    component.Type.Contains("analytics", StringComparison.OrdinalIgnoreCase)
+            ? "High"
+            : "Medium";
+
+        var gdpr = hasSensitiveFlow || component.DataSensitivityLevel.Contains("high", StringComparison.OrdinalIgnoreCase)
+            ? "High"
+            : component.DataSensitivityLevel.Contains("medium", StringComparison.OrdinalIgnoreCase) ? "Medium" : "Low";
+
+        var security = component.IsExternal || component.TrustZone.Contains("external", StringComparison.OrdinalIgnoreCase)
+            ? "High"
+            : component.TrustZone.Contains("dmz", StringComparison.OrdinalIgnoreCase) ? "Medium" : "Low";
+
+        var vendor = component.IsExternal || inventory.Vendors.Any(vendor =>
+            component.Name.Contains(vendor.Name, StringComparison.OrdinalIgnoreCase) ||
+            vendor.ServiceType.Contains("llm", StringComparison.OrdinalIgnoreCase))
+            ? "High"
+            : "Low";
+
+        var operational = architecture.Stores.Any(store => store.ComponentId == component.Id && store.RetentionDays > 1800)
+            ? "Medium"
+            : "Compliant";
+
+        return new ComponentRiskRow(component.Name, aiAct, gdpr, security, vendor, operational);
+    }
+
     private sealed record TrendPoint(string Label, int Score);
+    private sealed record AssessmentTimelineItem(DateTimeOffset RanAt, string Provider);
+    private sealed record RiskLegendBucket(string Label, string CssClass, int Count);
+    private sealed record ComponentRiskRow(string Component, string AiAct, string Gdpr, string Security, string Vendor, string Operational);
+    private sealed record DashboardExportResult(Guid Id, string ExportType, string MimeType, DateTimeOffset CreatedAt);
 }

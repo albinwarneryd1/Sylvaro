@@ -30,7 +30,7 @@ else
 
         @if (!string.IsNullOrWhiteSpace(_error))
         {
-            <div class="alert-danger">@_error</div>
+            <EnterpriseErrorPanel ErrorText="@_error" FriendlyMessage="AI system registry operation failed." OnRetry="LoadSystemsAsync" />
         }
 
         <EditForm FormName="ai-systems-create-form" Model="_createForm" OnValidSubmit="CreateSystemAsync">
@@ -63,6 +63,7 @@ else
     private readonly CreateSystemForm _createForm = new();
     private List<Normyx.Web.Models.AiSystemListItem> _systems = [];
     private string _error = string.Empty;
+    private bool _attemptedInitialLoad;
 
     protected override async Task OnInitializedAsync()
     {
@@ -71,7 +72,20 @@ else
             return;
         }
 
+        _attemptedInitialLoad = true;
         await LoadSystemsAsync();
+    }
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (_attemptedInitialLoad || !Session.IsInitialized || !Session.IsAuthenticated)
+        {
+            return;
+        }
+
+        _attemptedInitialLoad = true;
+        await LoadSystemsAsync();
+        await InvokeAsync(StateHasChanged);
     }
 
     private async Task LoadSystemsAsync()
