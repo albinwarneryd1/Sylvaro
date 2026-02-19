@@ -83,6 +83,33 @@ dotnet run --project src/Sylvaro.Web/Sylvaro.Web.csproj
 - Security: `/security/sessions`, `/security/sessions/revoke-others`, `/security/api-tokens`
 - Audit: `/audit`, `/audit/export`
 
+## Enterprise UI Theme
+
+The platform now ships with a light institutional design system aimed at governance workflows:
+
+- Warm off-white background with white and stone surfaces
+- Bronze accent usage limited to interaction and emphasis
+- Compact 12-column dashboard density for executive review
+- Institutional error surfaces with correlation IDs and collapsible technical details
+- Sticky table headers and dense row formatting for audit and registry views
+
+Related files:
+
+- `src/Sylvaro.Web/wwwroot/app.css`
+- `src/Sylvaro.Web/Components/Layout/MainLayout.razor`
+- `src/Sylvaro.Web/Components/Layout/NavMenu.razor`
+- `src/Sylvaro.Web/Components/Shared/InstitutionalAlert.razor`
+- `docs/sylvaro-design-system.md`
+
+## Screenshot Checklist
+
+Capture these pages after running Docker for visual QA and release notes:
+
+1. `/login` (premium auth layout and brand panel)
+2. `/` (Executive Overview with metric strip, compliance instrument, matrix, governance status)
+3. `/ai-systems` (registry table with search and status filters)
+4. `/audit-log` (table mode with action, actor, and date filters)
+5. `/evidence-vault` (evidence inventory table)
 ## Troubleshooting
 
 - If `docker compose up --build` fails with `Cannot connect to the Docker daemon`, start Docker Desktop and wait until it shows as running, then rerun compose.
