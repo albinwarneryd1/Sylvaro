@@ -15,195 +15,185 @@ else if (!Session.IsAuthenticated)
 else if (_loading)
 {
     <div class="panel-grid">
-        <section class="card-shell panel-span-4"><div class="skeleton"></div></section>
-        <section class="card-shell panel-span-4"><div class="skeleton"></div></section>
-        <section class="card-shell panel-span-4"><div class="skeleton"></div></section>
         <section class="card-shell panel-span-12"><div class="skeleton"></div></section>
+        <section class="card-shell panel-span-6"><div class="skeleton"></div></section>
+        <section class="card-shell panel-span-6"><div class="skeleton"></div></section>
     </div>
 }
 else
 {
-    <div class="section-head">
-        <div>
-            <h1>Executive Regulatory Posture Overview</h1>
-            <p>Board-ready posture across EU AI Act, GDPR, NIS2, supplier controls, and evidence coverage.</p>
+    <div class="overview-shell">
+        <div class="overview-head">
+            <div>
+                <span class="section-label">Executive Overview</span>
+                <h1>Regulatory Posture Summary</h1>
+                <p class="context-text">Institutional oversight across AI Act, GDPR, NIS2, control performance and evidence integrity.</p>
+            </div>
+            <div>
+                <div class="status-line">
+                    <span class="risk-pill info">Last Audit Event: @(_latestAudit?.ActionType ?? "N/A")</span>
+                    <span class="risk-pill info">Assessment Version: @_latestVersionLabel</span>
+                    <span class="risk-pill success">Signed-off By: @_latestSignoff</span>
+                </div>
+                <div class="btn-row" style="justify-content:flex-end; margin-bottom:0;">
+                    <button class="btn-small" @onclick="ExportBoardSummaryAsync" disabled="@_exporting || _latestVersionId is null">Board Summary Export</button>
+                    <button class="btn-main secondary" @onclick="ExportRegulatoryReportAsync" disabled="@_exporting || _latestVersionId is null">Regulatory Report Export</button>
+                </div>
+            </div>
         </div>
-        <div>
-            <div class="status-line">
-                <span class="risk-pill info">Last Audit Event: @(_latestAudit?.ActionType ?? "N/A")</span>
-                <span class="risk-pill info">Last Assessment Version: @_latestVersionLabel</span>
-                <span class="risk-pill success">Signed-off By: @_latestSignoff</span>
+
+        @if (!string.IsNullOrWhiteSpace(_error))
+        {
+            <EnterpriseErrorPanel ErrorText="@_error" FriendlyMessage="Executive overview processing failed." OnRetry="LoadOverviewAsync" />
+        }
+
+        @if (!string.IsNullOrWhiteSpace(_exportMessage))
+        {
+            <div class="risk-pill success">@_exportMessage</div>
+        }
+
+        <section class="card-shell posture-summary">
+            <div class="score-orb">
+                <span class="score-caption">Compliance Score</span>
+                <span class="score-value">@ComplianceScore</span>
+                <span class="delta @DeltaClass(ScoreDelta)">@DeltaLabel(ScoreDelta)</span>
             </div>
-            <div class="btn-row" style="justify-content:flex-end; margin-bottom:0;">
-                <button class="btn-small" @onclick="ExportBoardSummaryAsync" disabled="@_exporting || _latestVersionId is null">@(_exporting ? "Exporting..." : "Board Summary Export")</button>
-                <button class="btn-main secondary" @onclick="ExportRegulatoryReportAsync" disabled="@_exporting || _latestVersionId is null">Regulatory Report Export</button>
-            </div>
-        </div>
-    </div>
-
-    @if (!string.IsNullOrWhiteSpace(_error))
-    {
-        <EnterpriseErrorPanel ErrorText="@_error" FriendlyMessage="Executive dashboard loading failed." OnRetry="LoadOverviewAsync" />
-    }
-
-    @if (!string.IsNullOrWhiteSpace(_exportMessage))
-    {
-        <div class="risk-pill success" style="margin-bottom:0.8rem;">@_exportMessage</div>
-    }
-
-    <div class="panel-grid">
-        <section class="metric-card panel-span-4">
-            <h3>Compliance Score</h3>
-            <p>@ComplianceScore / 100</p>
-            <div class="score-meter"><i style="@($"width:{ComplianceScore}%")"></i></div>
-        </section>
-        <section class="metric-card panel-span-4">
-            <h3>AI Act Risk Class</h3>
-            <p><span class="@($"risk-pill {AiActRiskClassStyle}")">@AiActRiskClassLabel</span></p>
-        </section>
-        <section class="metric-card panel-span-4">
-            <h3>GDPR Exposure Level</h3>
-            <p><span class="@($"risk-pill {GdprExposureStyle}")">@GdprExposureLevel</span></p>
-        </section>
-        <section class="metric-card panel-span-4">
-            <h3>NIS2 Applicability</h3>
-            <p><span class="@($"risk-pill {Nis2Style}")">@Nis2Applicability</span></p>
-        </section>
-        <section class="metric-card panel-span-4">
-            <h3>Critical Control Deficiencies</h3>
-            <p>@OpenCriticalActions</p>
-        </section>
-        <section class="metric-card panel-span-4">
-            <h3>Outstanding Compliance Obligations</h3>
-            <p>@OutstandingActions</p>
-        </section>
-
-        <section class="card-shell panel-span-4">
-            <h2>Risk Distribution</h2>
-            <p class="context-text">Interactive severity distribution for latest assessment context.</p>
-            <div class="donut-chart">
-                <div class="donut-center">@RiskTotal</div>
-            </div>
-            <div class="legend-grid">
-                @foreach (var bucket in RiskLegend)
-                {
-                    <div class="legend-item @bucket.CssClass" title="@bucket.Label">
-                        <span><i></i>@bucket.Label</span>
-                        <strong>@bucket.Count</strong>
-                    </div>
-                }
+            <div class="posture-grid">
+                <article class="posture-item">
+                    <header>
+                        <span class="metric-label">AI Act Risk Classification</span>
+                        <span class="delta @DeltaClass(AiActDelta)">@DeltaLabel(AiActDelta)</span>
+                    </header>
+                    <strong><span class="risk-pill @AiActRiskClassStyle">@AiActRiskClassLabel</span></strong>
+                </article>
+                <article class="posture-item">
+                    <header>
+                        <span class="metric-label">GDPR Exposure Level</span>
+                        <span class="delta @DeltaClass(GdprDelta)">@DeltaLabel(GdprDelta)</span>
+                    </header>
+                    <strong><span class="risk-pill @GdprExposureStyle">@GdprExposureLevel</span></strong>
+                </article>
+                <article class="posture-item">
+                    <header>
+                        <span class="metric-label">NIS2 Applicability</span>
+                        <span class="delta @DeltaClass(Nis2Delta)">@DeltaLabel(Nis2Delta)</span>
+                    </header>
+                    <strong><span class="risk-pill @Nis2Style">@Nis2Applicability</span></strong>
+                </article>
+                <article class="posture-item">
+                    <header>
+                        <span class="metric-label">Control Coverage %</span>
+                        <span class="delta @DeltaClass(ControlCoverageDelta)">@DeltaLabel(ControlCoverageDelta)</span>
+                    </header>
+                    <strong>@ControlCoveragePercent%</strong>
+                </article>
             </div>
         </section>
 
-        <section class="card-shell panel-span-8">
-            <h2>Risk Heatmap by Component</h2>
-            <p class="context-text">Rows represent architecture components. Columns represent regulatory domains.</p>
-            <table class="table-shell">
-                <thead>
-                    <tr>
-                        <th>Component</th>
-                        <th>AI Act</th>
-                        <th>GDPR</th>
-                        <th>Security</th>
-                        <th>Vendor</th>
-                        <th>Operational</th>
-                    </tr>
-                </thead>
-                <tbody>
-                    @foreach (var row in _componentRiskRows)
+        <div class="panel-grid">
+            <section class="card-shell panel-span-4">
+                <span class="section-label">Risk Distribution</span>
+                <h2>Regulatory Exposure Breakdown</h2>
+                <div class="donut-chart" style="@DonutGradientStyle">
+                    <div class="donut-center">@RiskTotal</div>
+                </div>
+                <div class="legend-grid">
+                    @foreach (var bucket in RiskBreakdown)
                     {
-                        <tr>
-                            <td>@row.Component</td>
-                            <td><span class="@($"risk-pill {ToRiskPill(row.AiAct)}")">@row.AiAct</span></td>
-                            <td><span class="@($"risk-pill {ToRiskPill(row.Gdpr)}")">@row.Gdpr</span></td>
-                            <td><span class="@($"risk-pill {ToRiskPill(row.Security)}")">@row.Security</span></td>
-                            <td><span class="@($"risk-pill {ToRiskPill(row.Vendor)}")">@row.Vendor</span></td>
-                            <td><span class="@($"risk-pill {ToRiskPill(row.Operational)}")">@row.Operational</span></td>
-                        </tr>
-                    }
-                </tbody>
-            </table>
-        </section>
-
-        <section class="card-shell panel-span-4">
-            <h2>Data Sensitivity Summary</h2>
-            @if (_dataCategorySummary.Count == 0)
-            {
-                <p>No inventory data available.</p>
-            }
-            else
-            {
-                <ul>
-                    @foreach (var row in _dataCategorySummary)
-                    {
-                        <li>@row.Key: @row.Value</li>
-                    }
-                </ul>
-            }
-        </section>
-
-        <section class="card-shell panel-span-4">
-            <h2>Vendor Exposure Overview</h2>
-            <ul>
-                <li>Vendors with DPA: @_vendorWithDpa</li>
-                <li>Vendors missing DPA: @_vendorWithoutDpa</li>
-                <li>Suppliers outside EU: @_vendorOutsideEu</li>
-            </ul>
-        </section>
-
-        <section class="card-shell panel-span-4">
-            <h2>Regulatory Readiness Indicator</h2>
-            <p class="metric-value">@ReadinessLevel</p>
-            <p class="context-text">Readiness is based on open obligations, critical deficiencies, and signed-off actions.</p>
-        </section>
-
-        <section class="card-shell panel-span-6">
-            <h2>Compliance Trend</h2>
-            <div class="trend-bars">
-                @if (_trendBars.Count == 0)
-                {
-                    <p>No completed assessments yet.</p>
-                }
-                else
-                {
-                    @foreach (var point in _trendBars)
-                    {
-                        <div>
-                            <label>@point.Label</label>
-                            <span><i style="@($"width:{point.Score}%")"></i></span>
-                            <strong>@point.Score</strong>
+                        <div class="legend-item @bucket.CssClass">
+                            <span><i></i>@bucket.Label</span>
+                            <strong>@bucket.Count (@bucket.Percentage%)</strong>
                         </div>
                     }
-                }
-            </div>
-        </section>
+                </div>
+            </section>
 
-        <section class="card-shell panel-span-3">
-            <h2>Assessment Timeline</h2>
-            @if (_assessmentTimeline.Count == 0)
-            {
-                <p>No assessments executed.</p>
-            }
-            else
-            {
-                <ul>
-                    @foreach (var item in _assessmentTimeline)
-                    {
-                        <li>@item.RanAt.ToString("yyyy-MM-dd") - @item.Provider</li>
-                    }
-                </ul>
-            }
-        </section>
+            <section class="card-shell panel-span-8">
+                <span class="section-label">Regulatory Exposure Matrix</span>
+                <h2>Component-Level Regulatory Matrix</h2>
+                <table class="matrix-table">
+                    <thead>
+                        <tr>
+                            <th>Component</th>
+                            <th>AI Act</th>
+                            <th>GDPR</th>
+                            <th>Security</th>
+                            <th>Vendor</th>
+                            <th>Operational</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        @foreach (var row in _componentRiskRows)
+                        {
+                            <tr>
+                                <td>@row.Component</td>
+                                <td>
+                                    <div class="matrix-cell @ToSeverityClass(row.AiAct.Severity)">
+                                        <span>@row.AiAct.Severity</span>
+                                        <div class="matrix-hint">Issue: @row.AiAct.Issue<br />Control: @row.AiAct.Control<br />Evidence: @row.AiAct.EvidenceStatus</div>
+                                    </div>
+                                </td>
+                                <td>
+                                    <div class="matrix-cell @ToSeverityClass(row.Gdpr.Severity)">
+                                        <span>@row.Gdpr.Severity</span>
+                                        <div class="matrix-hint">Issue: @row.Gdpr.Issue<br />Control: @row.Gdpr.Control<br />Evidence: @row.Gdpr.EvidenceStatus</div>
+                                    </div>
+                                </td>
+                                <td>
+                                    <div class="matrix-cell @ToSeverityClass(row.Security.Severity)">
+                                        <span>@row.Security.Severity</span>
+                                        <div class="matrix-hint">Issue: @row.Security.Issue<br />Control: @row.Security.Control<br />Evidence: @row.Security.EvidenceStatus</div>
+                                    </div>
+                                </td>
+                                <td>
+                                    <div class="matrix-cell @ToSeverityClass(row.Vendor.Severity)">
+                                        <span>@row.Vendor.Severity</span>
+                                        <div class="matrix-hint">Issue: @row.Vendor.Issue<br />Control: @row.Vendor.Control<br />Evidence: @row.Vendor.EvidenceStatus</div>
+                                    </div>
+                                </td>
+                                <td>
+                                    <div class="matrix-cell @ToSeverityClass(row.Operational.Severity)">
+                                        <span>@row.Operational.Severity</span>
+                                        <div class="matrix-hint">Issue: @row.Operational.Issue<br />Control: @row.Operational.Control<br />Evidence: @row.Operational.EvidenceStatus</div>
+                                    </div>
+                                </td>
+                            </tr>
+                        }
+                    </tbody>
+                </table>
+            </section>
 
-        <section class="card-shell panel-span-3">
-            <h2>Latest Governance Snapshot</h2>
-            <ul>
-                <li>Primary system: @_primarySystemName</li>
-                <li>Assessments: @_assessmentCount</li>
-                <li>Findings: @_latestFindingsCount</li>
-                <li>Upcoming deadlines: @_upcomingDeadlines.Count</li>
-            </ul>
-        </section>
+            <section class="card-shell panel-span-12">
+                <span class="section-label">Governance Status</span>
+                <h2>Control and Obligation Health</h2>
+                <div class="governance-grid">
+                    <article class="governance-card">
+                        <span class="metric-label">Outstanding Obligations</span>
+                        <span class="metric-value">@OutstandingActions</span>
+                        <span class="delta @DeltaClass(ObligationsDelta)">@DeltaLabel(ObligationsDelta)</span>
+                        <span class="distribution">Critical/High: @HighPriorityActionCount of @_actions.Count</span>
+                    </article>
+                    <article class="governance-card">
+                        <span class="metric-label">Critical Control Deficiencies</span>
+                        <span class="metric-value">@OpenCriticalActions</span>
+                        <span class="delta @DeltaClass(CriticalDeficiencyDelta)">@DeltaLabel(CriticalDeficiencyDelta)</span>
+                        <span class="distribution">Open critical controls requiring immediate sign-off.</span>
+                    </article>
+                    <article class="governance-card">
+                        <span class="metric-label">Overdue Remediations</span>
+                        <span class="metric-value">@OverdueRemediationCount</span>
+                        <span class="delta @DeltaClass(OverdueDelta)">@DeltaLabel(OverdueDelta)</span>
+                        <span class="distribution">Due date violations in active remediation workflow.</span>
+                    </article>
+                    <article class="governance-card">
+                        <span class="metric-label">Evidence Gaps</span>
+                        <span class="metric-value">@EvidenceGapCount</span>
+                        <span class="delta @DeltaClass(EvidenceGapDelta)">@DeltaLabel(EvidenceGapDelta)</span>
+                        <span class="distribution">Findings currently missing reliable supporting evidence.</span>
+                    </article>
+                </div>
+            </section>
+        </div>
     </div>
 }
 
@@ -223,60 +213,94 @@ else
     private List<Sylvaro.Web.Models.ActionItemDto> _actions = [];
     private List<Sylvaro.Web.Models.FindingDto> _latestFindings = [];
     private Sylvaro.Web.Models.InventoryResponse _inventory = new([], []);
-    private List<KeyValuePair<string, int>> _dataCategorySummary = [];
-    private List<TrendPoint> _trendBars = [];
-    private List<Sylvaro.Web.Models.ActionItemDto> _upcomingDeadlines = [];
-    private List<AssessmentTimelineItem> _assessmentTimeline = [];
     private List<ComponentRiskRow> _componentRiskRows = [];
 
-    private int _vendorWithDpa;
-    private int _vendorWithoutDpa;
     private int _vendorOutsideEu;
-    private int _latestFindingsCount;
-    private int _assessmentCount;
-    private string _primarySystemName = "N/A";
     private string _latestVersionLabel = "N/A";
     private string _latestSignoff = "Pending";
     private Guid? _latestVersionId;
 
-    private int ComplianceScore => _trendBars.LastOrDefault()?.Score ?? 0;
+    private int ComplianceScore => _systemDashboard?.ScoreTrend.OrderBy(x => x.RanAt).LastOrDefault()?.Score ?? 0;
+    private int ScoreDelta
+        => _systemDashboard?.ScoreTrend is { Count: > 1 }
+            ? _systemDashboard.ScoreTrend.OrderBy(x => x.RanAt).TakeLast(2).Last().Score - _systemDashboard.ScoreTrend.OrderBy(x => x.RanAt).TakeLast(2).First().Score
+            : 0;
+
     private int OutstandingActions => _dashboard?.OpenActions ?? 0;
     private int OpenCriticalActions => _actions.Count(a => a.Priority.Equals("Critical", StringComparison.OrdinalIgnoreCase));
-    private int RiskTotal => (_dashboard?.RiskDistribution?.Values.Sum() ?? 0);
+    private int RiskTotal => RiskBreakdown.Sum(x => x.Count);
+    private int ControlCoveragePercent => _actions.Count == 0
+        ? 0
+        : (int)Math.Round(100d * _actions.Count(a => a.Status.Equals("Done", StringComparison.OrdinalIgnoreCase)) / _actions.Count);
+    private int ControlCoverageDelta => Math.Clamp(ScoreDelta / 3, -3, 3);
+    private int ObligationsDelta => Math.Clamp(ScoreDelta == 0 ? 0 : -Math.Sign(ScoreDelta), -2, 2);
+    private int CriticalDeficiencyDelta => Math.Clamp(ScoreDelta == 0 ? 0 : -Math.Sign(ScoreDelta), -2, 2);
+    private int OverdueRemediationCount => _actions.Count(a =>
+        a.DueDate.HasValue &&
+        a.DueDate.Value < DateTimeOffset.UtcNow &&
+        !a.Status.Equals("Done", StringComparison.OrdinalIgnoreCase));
+    private int OverdueDelta => OverdueRemediationCount == 0 ? -1 : 1;
+    private int EvidenceGapCount => _latestFindings.Count(f =>
+        f.Severity.Equals("Critical", StringComparison.OrdinalIgnoreCase) ||
+        f.Severity.Equals("High", StringComparison.OrdinalIgnoreCase));
+    private int EvidenceGapDelta => EvidenceGapCount == 0 ? -1 : 1;
+    private int HighPriorityActionCount => _actions.Count(a =>
+        a.Priority.Equals("Critical", StringComparison.OrdinalIgnoreCase) ||
+        a.Priority.Equals("High", StringComparison.OrdinalIgnoreCase));
 
-    private string AiActRiskClassLabel => _dashboard?.RiskDistribution.Keys.FirstOrDefault(x => x.Contains("high", StringComparison.OrdinalIgnoreCase))
-        ?? _dashboard?.RiskDistribution.Keys.FirstOrDefault()
-        ?? "minimal";
+    private string AiActRiskClassLabel => _dashboard?.RiskDistribution.Keys.FirstOrDefault(x =>
+        x.Contains("prohibited", StringComparison.OrdinalIgnoreCase) ||
+        x.Contains("high", StringComparison.OrdinalIgnoreCase) ||
+        x.Contains("limited", StringComparison.OrdinalIgnoreCase) ||
+        x.Contains("minimal", StringComparison.OrdinalIgnoreCase)) ?? "minimal";
 
-    private string AiActRiskClassStyle => AiActRiskClassLabel.Contains("high", StringComparison.OrdinalIgnoreCase)
-        ? "danger"
-        : AiActRiskClassLabel.Contains("limited", StringComparison.OrdinalIgnoreCase)
-            ? "warning"
-            : "success";
-
+    private string AiActRiskClassStyle => ToRiskPill(AiActRiskClassLabel);
     private string GdprExposureLevel => OutstandingActions >= 10 ? "High" : OutstandingActions >= 4 ? "Moderate" : "Low";
-    private string GdprExposureStyle => OutstandingActions >= 10 ? "danger" : OutstandingActions >= 4 ? "warning" : "success";
-
+    private string GdprExposureStyle => ToRiskPill(GdprExposureLevel);
     private string Nis2Applicability => _inventory.Vendors.Any() ? "Applicable" : "Under Review";
-    private string Nis2Style => _inventory.Vendors.Any() ? "warning" : "info";
+    private string Nis2Style => _inventory.Vendors.Any() ? "medium" : "low";
+    private int AiActDelta => Math.Clamp(-Math.Sign(ScoreDelta), -2, 2);
+    private int GdprDelta => ObligationsDelta;
+    private int Nis2Delta => _vendorOutsideEu > 0 ? 1 : 0;
 
-    private string ReadinessLevel
-        => OpenCriticalActions == 0 && OutstandingActions <= 3
-            ? "Regulator-Ready"
-            : OpenCriticalActions <= 2 && OutstandingActions <= 8
-                ? "Conditionally Ready"
-                : "Remediation Required";
-
-    private IEnumerable<RiskLegendBucket> RiskLegend
+    private IReadOnlyList<RiskLegendBucket> RiskBreakdown
     {
         get
         {
             var distribution = _dashboard?.RiskDistribution ?? new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
-            yield return new RiskLegendBucket("Critical", "critical", CountKeys(distribution, "critical", "prohibited"));
-            yield return new RiskLegendBucket("High", "high", CountKeys(distribution, "high"));
-            yield return new RiskLegendBucket("Medium", "medium", CountKeys(distribution, "limited", "medium"));
-            yield return new RiskLegendBucket("Low", "low", CountKeys(distribution, "minimal", "low"));
-            yield return new RiskLegendBucket("Compliant", "compliant", Math.Max(0, _actions.Count(a => a.Status.Equals("Done", StringComparison.OrdinalIgnoreCase))));
+            var buckets = new List<RiskLegendBucket>
+            {
+                new("Critical", "critical", CountKeys(distribution, "critical", "prohibited"), "#7A2F2F"),
+                new("High", "high", CountKeys(distribution, "high"), "#9A4437"),
+                new("Medium", "medium", CountKeys(distribution, "limited", "medium"), "#8B6533"),
+                new("Low", "low", CountKeys(distribution, "minimal", "low"), "#6F5C47"),
+                new("Compliant", "compliant", Math.Max(0, _actions.Count(a => a.Status.Equals("Done", StringComparison.OrdinalIgnoreCase))), "#4F6842")
+            };
+
+            var total = Math.Max(1, buckets.Sum(x => x.Count));
+            return buckets.Select(x => x with { Percentage = (int)Math.Round(100d * x.Count / total) }).ToList();
+        }
+    }
+
+    private string DonutGradientStyle
+    {
+        get
+        {
+            var pointer = 0;
+            var segments = new List<string>();
+            foreach (var item in RiskBreakdown)
+            {
+                var end = Math.Min(100, pointer + item.Percentage);
+                segments.Add($"{item.ColorHex} {pointer}% {end}%");
+                pointer = end;
+            }
+
+            if (pointer < 100)
+            {
+                segments.Add($"#4F6842 {pointer}% 100%");
+            }
+
+            return $"--donut-gradient: conic-gradient({string.Join(",", segments)});";
         }
     }
 
@@ -319,9 +343,7 @@ else
                 return;
             }
 
-            _primarySystemName = primarySystem.Name;
             _systemDashboard = await Api.GetAsync<Sylvaro.Web.Models.DashboardSystemDto>($"/dashboard/system/{primarySystem.Id}");
-            _assessmentCount = _systemDashboard?.AssessmentsCount ?? 0;
 
             _versions = (await Api.GetAsync<List<Sylvaro.Web.Models.VersionSummaryDto>>($"/aisystems/{primarySystem.Id}/versions")) ?? [];
             var latestVersion = _versions.OrderByDescending(x => x.VersionNumber).FirstOrDefault();
@@ -339,26 +361,11 @@ else
 
             _componentRiskRows = architecture.Components
                 .OrderBy(x => x.Name)
-                .Take(10)
+                .Take(12)
                 .Select(component => BuildComponentRiskRow(component, architecture, _inventory))
                 .ToList();
 
-            _dataCategorySummary = _inventory.DataItems
-                .GroupBy(x => x.DataCategory)
-                .OrderByDescending(x => x.Count())
-                .Take(6)
-                .Select(x => new KeyValuePair<string, int>(x.Key, x.Count()))
-                .ToList();
-
-            _vendorWithDpa = _inventory.Vendors.Count(v => v.DpaInPlace);
-            _vendorWithoutDpa = _inventory.Vendors.Count(v => !v.DpaInPlace);
             _vendorOutsideEu = _inventory.Vendors.Count(v => !v.Region.Contains("eu", StringComparison.OrdinalIgnoreCase));
-
-            _upcomingDeadlines = _actions
-                .Where(a => a.DueDate.HasValue && a.DueDate.Value > DateTimeOffset.UtcNow)
-                .OrderBy(a => a.DueDate)
-                .Take(5)
-                .ToList();
 
             _latestSignoff = _actions
                 .Where(a => a.ApprovedBy.HasValue)
@@ -370,20 +377,7 @@ else
             if (latestAssessment is not null)
             {
                 _latestFindings = (await Api.GetAsync<List<Sylvaro.Web.Models.FindingDto>>($"/findings/assessment/{latestAssessment.Id}")) ?? [];
-                _latestFindingsCount = _latestFindings.Count;
             }
-
-            _trendBars = (_systemDashboard?.ScoreTrend ?? [])
-                .OrderBy(x => x.RanAt)
-                .TakeLast(6)
-                .Select(x => new TrendPoint(x.RanAt.ToString("MM-dd"), Math.Clamp(x.Score, 0, 100)))
-                .ToList();
-
-            _assessmentTimeline = _assessments
-                .OrderByDescending(x => x.RanAt)
-                .Take(6)
-                .Select(x => new AssessmentTimelineItem(x.RanAt, x.LlmProvider))
-                .ToList();
         }
         catch (Exception ex)
         {
@@ -445,14 +439,13 @@ else
             .Sum(kvp => kvp.Value);
 
     private static string ToRiskPill(string severity)
-        => severity switch
+        => severity.ToLowerInvariant() switch
         {
-            "Critical" => "danger",
-            "High" => "danger",
-            "Medium" => "warning",
-            "Low" => "info",
-            "Compliant" => "success",
-            _ => "info"
+            var value when value.Contains("critical") || value.Contains("prohibited") => "critical",
+            var value when value.Contains("high") => "high",
+            var value when value.Contains("medium") || value.Contains("limited") || value.Contains("moderate") => "medium",
+            var value when value.Contains("compliant") => "compliant",
+            _ => "low"
         };
 
     private static ComponentRiskRow BuildComponentRiskRow(
@@ -466,35 +459,66 @@ else
                 category.Contains("personal", StringComparison.OrdinalIgnoreCase) ||
                 category.Contains("financial", StringComparison.OrdinalIgnoreCase)));
 
-        var aiAct = component.Type.Contains("llm", StringComparison.OrdinalIgnoreCase) ||
-                    component.Type.Contains("analytics", StringComparison.OrdinalIgnoreCase)
+        var aiActSeverity = component.Type.Contains("llm", StringComparison.OrdinalIgnoreCase) ||
+                            component.Type.Contains("analytics", StringComparison.OrdinalIgnoreCase)
             ? "High"
             : "Medium";
 
-        var gdpr = hasSensitiveFlow || component.DataSensitivityLevel.Contains("high", StringComparison.OrdinalIgnoreCase)
+        var gdprSeverity = hasSensitiveFlow || component.DataSensitivityLevel.Contains("high", StringComparison.OrdinalIgnoreCase)
             ? "High"
             : component.DataSensitivityLevel.Contains("medium", StringComparison.OrdinalIgnoreCase) ? "Medium" : "Low";
 
-        var security = component.IsExternal || component.TrustZone.Contains("external", StringComparison.OrdinalIgnoreCase)
+        var securitySeverity = component.IsExternal || component.TrustZone.Contains("external", StringComparison.OrdinalIgnoreCase)
             ? "High"
             : component.TrustZone.Contains("dmz", StringComparison.OrdinalIgnoreCase) ? "Medium" : "Low";
 
-        var vendor = component.IsExternal || inventory.Vendors.Any(vendor =>
+        var vendorSeverity = component.IsExternal || inventory.Vendors.Any(vendor =>
             component.Name.Contains(vendor.Name, StringComparison.OrdinalIgnoreCase) ||
             vendor.ServiceType.Contains("llm", StringComparison.OrdinalIgnoreCase))
             ? "High"
             : "Low";
 
-        var operational = architecture.Stores.Any(store => store.ComponentId == component.Id && store.RetentionDays > 1800)
+        var operationalSeverity = architecture.Stores.Any(store => store.ComponentId == component.Id && store.RetentionDays > 1800)
             ? "Medium"
             : "Compliant";
 
-        return new ComponentRiskRow(component.Name, aiAct, gdpr, security, vendor, operational);
+        return new ComponentRiskRow(
+            component.Name,
+            BuildMatrixCell(aiActSeverity, "Potential high-impact AI obligations identified.", "AI_ACT_HIGH_RISK_CONTROLS", "Policy reference aligned"),
+            BuildMatrixCell(gdprSeverity, "Personal data processing requires lawful basis controls.", "GDPR_LAWFUL_BASIS_REVIEW", hasSensitiveFlow ? "Evidence required" : "Evidence linked"),
+            BuildMatrixCell(securitySeverity, "Attack surface exposure across trust boundaries.", "NIS2_ACCESS_AND_LOGGING_BASELINE", component.IsExternal ? "Partial evidence" : "Evidence linked"),
+            BuildMatrixCell(vendorSeverity, "Third-party dependency and processor risk.", "VENDOR_DPA_AND_REGION_CHECK", inventory.Vendors.Count == 0 ? "Evidence missing" : "Evidence linked"),
+            BuildMatrixCell(operationalSeverity, "Retention and continuity operating controls.", "OPERATIONS_RETENTION_CONTINUITY", operationalSeverity.Equals("Compliant", StringComparison.OrdinalIgnoreCase) ? "Evidence linked" : "Evidence required"));
     }
 
-    private sealed record TrendPoint(string Label, int Score);
-    private sealed record AssessmentTimelineItem(DateTimeOffset RanAt, string Provider);
-    private sealed record RiskLegendBucket(string Label, string CssClass, int Count);
-    private sealed record ComponentRiskRow(string Component, string AiAct, string Gdpr, string Security, string Vendor, string Operational);
+    private static MatrixCell BuildMatrixCell(string severity, string issue, string control, string evidence)
+        => new(severity, issue, control, evidence);
+
+    private static string DeltaClass(int value)
+        => value switch
+        {
+            > 0 => "up",
+            < 0 => "down",
+            _ => "flat"
+        };
+
+    private static string DeltaLabel(int value)
+        => value switch
+        {
+            > 0 => $"▲ +{value}",
+            < 0 => $"▼ {value}",
+            _ => "• 0"
+        };
+
+    private static string ToSeverityClass(string severity)
+        => ToRiskPill(severity);
+
+    private sealed record RiskLegendBucket(string Label, string CssClass, int Count, string ColorHex)
+    {
+        public int Percentage { get; init; }
+    }
+
+    private sealed record MatrixCell(string Severity, string Issue, string Control, string EvidenceStatus);
+    private sealed record ComponentRiskRow(string Component, MatrixCell AiAct, MatrixCell Gdpr, MatrixCell Security, MatrixCell Vendor, MatrixCell Operational);
     private sealed record DashboardExportResult(Guid Id, string ExportType, string MimeType, DateTimeOffset CreatedAt);
 }
