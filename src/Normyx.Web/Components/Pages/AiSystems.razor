@@ -1,7 +1,6 @@
 @page "/ai-systems"
 @inject Normyx.Web.Services.NormyxApiClient Api
 @inject Normyx.Web.Services.AuthSession Session
-@inject NavigationManager Nav
 
 <PageTitle>AI Systems - Normyx AI</PageTitle>
 
@@ -70,7 +69,6 @@ else
         catch (Exception ex)
         {
             _error = ex.Message;
-            Nav.NavigateTo("/login");
         }
     }
 

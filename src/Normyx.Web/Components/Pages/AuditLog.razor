@@ -14,6 +14,11 @@ else
         <h1>Audit Log</h1>
         <p>Immutable trail of tenant events.</p>
 
+        @if (!string.IsNullOrWhiteSpace(_error))
+        {
+            <div class="alert-danger">@_error</div>
+        }
+
         <table class="table-shell">
             <thead><tr><th>Timestamp</th><th>Action</th><th>Target</th><th>Actor</th><th>IP</th></tr></thead>
             <tbody>
@@ -34,6 +39,7 @@ else
 
 @code {
     private List<Normyx.Web.Models.AuditLogDto> _logs = [];
+    private string _error = string.Empty;
 
     protected override async Task OnInitializedAsync()
     {
@@ -42,6 +48,13 @@ else
             return;
         }
 
-        _logs = (await Api.GetAsync<List<Normyx.Web.Models.AuditLogDto>>("/audit?take=200")) ?? [];
+        try
+        {
+            _logs = (await Api.GetAsync<List<Normyx.Web.Models.AuditLogDto>>("/audit?take=200")) ?? [];
+        }
+        catch (Exception ex)
+        {
+            _error = ex.Message;
+        }
     }
 }
