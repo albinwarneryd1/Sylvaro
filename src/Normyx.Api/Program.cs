@@ -4,6 +4,7 @@ using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.IdentityModel.Tokens;
 using Microsoft.OpenApi.Models;
+using Normyx.Api.Contracts.Errors;
 using Normyx.Api.Middleware;
 using Normyx.Api.Endpoints;
 using Normyx.Application.Abstractions;
@@ -59,6 +60,35 @@ builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
             ValidAudience = jwt.Audience,
             IssuerSigningKey = signingKey,
             ClockSkew = TimeSpan.Zero
+        };
+
+        options.Events = new JwtBearerEvents
+        {
+            OnChallenge = async context =>
+            {
+                context.HandleResponse();
+                var httpContext = context.HttpContext;
+                var correlationId = httpContext.Items.TryGetValue(CorrelationIdMiddleware.HttpContextItemKey, out var value)
+                    ? value?.ToString() ?? httpContext.TraceIdentifier
+                    : httpContext.TraceIdentifier;
+
+                httpContext.Response.StatusCode = StatusCodes.Status401Unauthorized;
+                httpContext.Response.ContentType = "application/json";
+                var payload = new ApiErrorEnvelope(correlationId, new ApiErrorDetail("unauthorized", "Authentication is required."));
+                await httpContext.Response.WriteAsJsonAsync(payload);
+            },
+            OnForbidden = async context =>
+            {
+                var httpContext = context.HttpContext;
+                var correlationId = httpContext.Items.TryGetValue(CorrelationIdMiddleware.HttpContextItemKey, out var value)
+                    ? value?.ToString() ?? httpContext.TraceIdentifier
+                    : httpContext.TraceIdentifier;
+
+                httpContext.Response.StatusCode = StatusCodes.Status403Forbidden;
+                httpContext.Response.ContentType = "application/json";
+                var payload = new ApiErrorEnvelope(correlationId, new ApiErrorDetail("forbidden", "Insufficient permissions."));
+                await httpContext.Response.WriteAsJsonAsync(payload);
+            }
         };
     });
 

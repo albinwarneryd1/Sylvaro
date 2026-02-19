@@ -180,6 +180,92 @@ public class TenantIsolationTests : IAsyncLifetime
         Assert.Contains("Done", actionsPayload, StringComparison.OrdinalIgnoreCase);
     }
 
+    [Fact]
+    public async Task RefreshToken_Replay_IsRejected()
+    {
+        if (!_dockerAvailable)
+        {
+            return;
+        }
+
+        var client = _factory.CreateClient(new WebApplicationFactoryClientOptions
+        {
+            BaseAddress = new Uri("http://localhost")
+        });
+
+        var loginResponse = await client.PostAsJsonAsync("/auth/login", new
+        {
+            tenantName = "NordicFin AB",
+            email = "admin@nordicfin.example",
+            password = "ChangeMe123!"
+        });
+        loginResponse.EnsureSuccessStatusCode();
+        var loginPayload = await loginResponse.Content.ReadFromJsonAsync<AuthResponse>();
+        Assert.NotNull(loginPayload);
+
+        var firstRefresh = await client.PostAsJsonAsync("/auth/refresh", new
+        {
+            refreshToken = loginPayload!.RefreshToken
+        });
+        firstRefresh.EnsureSuccessStatusCode();
+
+        var replayRefresh = await client.PostAsJsonAsync("/auth/refresh", new
+        {
+            refreshToken = loginPayload.RefreshToken
+        });
+        Assert.Equal(System.Net.HttpStatusCode.Unauthorized, replayRefresh.StatusCode);
+    }
+
+    [Fact]
+    public async Task InvalidRegisterPayload_ReturnsValidationEnvelope()
+    {
+        if (!_dockerAvailable)
+        {
+            return;
+        }
+
+        var client = _factory.CreateClient(new WebApplicationFactoryClientOptions
+        {
+            BaseAddress = new Uri("http://localhost")
+        });
+
+        var response = await client.PostAsJsonAsync("/auth/register", new
+        {
+            tenantName = "x",
+            email = "not-an-email",
+            displayName = "a",
+            password = "short"
+        });
+
+        Assert.Equal(System.Net.HttpStatusCode.BadRequest, response.StatusCode);
+        var payload = await response.Content.ReadAsStringAsync();
+        Assert.Contains("validation_failed", payload, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("correlationId", payload, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public async Task ProtectedEndpoint_WithInvalidToken_ReturnsUnauthorizedEnvelope()
+    {
+        if (!_dockerAvailable)
+        {
+            return;
+        }
+
+        var client = _factory.CreateClient(new WebApplicationFactoryClientOptions
+        {
+            BaseAddress = new Uri("http://localhost")
+        });
+
+        using var request = new HttpRequestMessage(HttpMethod.Get, "/tenants/me");
+        request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", "invalid-token");
+
+        var response = await client.SendAsync(request);
+        Assert.Equal(System.Net.HttpStatusCode.Unauthorized, response.StatusCode);
+        var payload = await response.Content.ReadAsStringAsync();
+        Assert.Contains("unauthorized", payload, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("correlationId", payload, StringComparison.OrdinalIgnoreCase);
+    }
+
     private static async Task<string> LoginAsync(HttpClient client, string tenant, string email, string password)
     {
         var response = await client.PostAsJsonAsync("/auth/login", new
