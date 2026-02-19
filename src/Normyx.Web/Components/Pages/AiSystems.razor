@@ -1,0 +1,108 @@
+@page "/ai-systems"
+@inject Normyx.Web.Services.NormyxApiClient Api
+@inject Normyx.Web.Services.AuthSession Session
+@inject NavigationManager Nav
+
+<PageTitle>AI Systems - Normyx AI</PageTitle>
+
+@if (!Session.IsAuthenticated)
+{
+    <div class="card-shell"><p>Please <a href="/login">log in</a>.</p></div>
+}
+else
+{
+    <div class="card-shell">
+        <h1>AI Systems</h1>
+        <p>Create and monitor AI systems for compliance posture.</p>
+
+        @if (!string.IsNullOrWhiteSpace(_error))
+        {
+            <div class="alert-danger">@_error</div>
+        }
+
+        <EditForm Model="_createForm" OnValidSubmit="CreateSystemAsync">
+            <div class="field-grid">
+                <InputText @bind-Value="_createForm.Name" class="text-input" placeholder="System name" />
+                <InputText @bind-Value="_createForm.Description" class="text-input" placeholder="Description" />
+            </div>
+            <button class="btn-main" type="submit">Create system</button>
+        </EditForm>
+
+        <table class="table-shell">
+            <thead><tr><th>Name</th><th>Status</th><th>Versions</th><th>Updated</th><th></th></tr></thead>
+            <tbody>
+                @foreach (var system in _systems)
+                {
+                    <tr>
+                        <td>@system.Name</td>
+                        <td>@system.Status</td>
+                        <td>@system.VersionCount</td>
+                        <td>@system.UpdatedAt.ToString("u")</td>
+                        <td><a class="btn-small" href="/ai-systems/@system.Id">Open</a></td>
+                    </tr>
+                }
+            </tbody>
+        </table>
+    </div>
+}
+
+@code {
+    private readonly CreateSystemForm _createForm = new();
+    private List<Normyx.Web.Models.AiSystemListItem> _systems = [];
+    private string _error = string.Empty;
+
+    protected override async Task OnInitializedAsync()
+    {
+        if (!Session.IsAuthenticated)
+        {
+            return;
+        }
+
+        await LoadSystemsAsync();
+    }
+
+    private async Task LoadSystemsAsync()
+    {
+        try
+        {
+            _systems = (await Api.GetAsync<List<Normyx.Web.Models.AiSystemListItem>>("/aisystems")) ?? [];
+        }
+        catch (Exception ex)
+        {
+            _error = ex.Message;
+            Nav.NavigateTo("/login");
+        }
+    }
+
+    private async Task CreateSystemAsync()
+    {
+        try
+        {
+            _error = string.Empty;
+            await Api.PostAsync("/aisystems", new
+            {
+                name = _createForm.Name,
+                description = _createForm.Description,
+                ownerUserId = (Guid?)null
+            });
+            _createForm.Reset();
+            await LoadSystemsAsync();
+        }
+        catch (Exception ex)
+        {
+            _error = ex.Message;
+        }
+    }
+
+    private sealed class CreateSystemForm
+    {
+        public string Name { get; set; } = string.Empty;
+        public string Description { get; set; } = string.Empty;
+
+        public void Reset()
+        {
+            Name = string.Empty;
+            Description = string.Empty;
+        }
+    }
+}

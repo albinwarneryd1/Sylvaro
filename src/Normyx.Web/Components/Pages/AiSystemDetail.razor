@@ -1,0 +1,1125 @@
+@page "/ai-systems/{SystemId:guid}"
+@inject Normyx.Web.Services.NormyxApiClient Api
+@inject Normyx.Web.Services.AuthSession Session
+
+<PageTitle>AI System Detail - Normyx AI</PageTitle>
+
+@if (!Session.IsAuthenticated)
+{
+    <div class="card-shell"><p>Please <a href="/login">log in</a>.</p></div>
+}
+else if (_loading)
+{
+    <div class="card-shell"><p>Loading system...</p></div>
+}
+else if (_system is null)
+{
+    <div class="card-shell"><p>System not found.</p></div>
+}
+else
+{
+    <div class="card-shell">
+        <h1>@_system.Name</h1>
+        <p>@_system.Description</p>
+
+        @if (!string.IsNullOrWhiteSpace(_error))
+        {
+            <div class="alert-danger">@_error</div>
+        }
+
+        @if (_currentVersionId is not null)
+        {
+            <div class="grid-cards" style="margin-bottom: 1rem;">
+                <section class="metric-card">
+                    <h3>Assessments</h3>
+                    <p>@_assessments.Count</p>
+                </section>
+                <section class="metric-card">
+                    <h3>Findings</h3>
+                    <p>@_findings.Count</p>
+                </section>
+                <section class="metric-card">
+                    <h3>Actions</h3>
+                    <p>@_actions.Count</p>
+                </section>
+                <section class="metric-card">
+                    <h3>Evidence Gaps</h3>
+                    <p>@_evidenceGaps.TotalGaps</p>
+                </section>
+            </div>
+
+            <div class="btn-row">
+                <button class="btn-main" @onclick="RunAssessmentAsync">Run Assessment</button>
+                <button class="btn-main secondary" @onclick="GenerateExportAsync">Generate Export</button>
+            </div>
+
+            @if (_lastRun is not null)
+            {
+                <p>Latest run: class=@_lastRun.AiActRiskClass, score=@_lastRun.ComplianceScore, findings=@_lastRun.FindingsCount, actions=@_lastRun.ActionsCount</p>
+            }
+        }
+
+        <h2>Versions</h2>
+        <ul>
+            @foreach (var version in _versions)
+            {
+                <li>
+                    v@version.VersionNumber - @version.ChangeSummary
+                    <button class="btn-small" @onclick="() => SelectVersionAsync(version.Id)">Use</button>
+                </li>
+            }
+        </ul>
+
+        @if (_currentVersionId is not null)
+        {
+            <h3>Compliance Diff</h3>
+            <div class="field-grid">
+                <InputSelect @bind-Value="_compareVersionId" class="text-input">
+                    <option value="">Select version</option>
+                    @foreach (var version in _versions.Where(x => x.Id != _currentVersionId.Value))
+                    {
+                        <option value="@version.Id">v@version.VersionNumber</option>
+                    }
+                </InputSelect>
+                <button class="btn-small" @onclick="RunDiffAsync">Compare</button>
+            </div>
+            @if (_diff is not null)
+            {
+                <p>Diff delta: @_diff.ScoreDelta, AI Act class changed: @_diff.AiActClassChanged</p>
+            }
+
+            <h2>Questionnaire</h2>
+            <EditForm Model="_questionnaire" OnValidSubmit="SaveQuestionnaireAsync">
+                <div class="field-grid">
+                    <InputText @bind-Value="_questionnaire.AutomatedDecisionMaking" class="text-input" placeholder="automatedDecisionMaking true/false" />
+                    <InputText @bind-Value="_questionnaire.CriticalSector" class="text-input" placeholder="criticalSector true/false" />
+                </div>
+                <button class="btn-small" type="submit">Save questionnaire</button>
+            </EditForm>
+
+            <h2>Architecture Components (@_architecture.Components.Count)</h2>
+            <ul>
+                @foreach (var component in _architecture.Components)
+                {
+                    <li>@component.Name (@component.Type) - @component.TrustZone - @component.DataSensitivityLevel</li>
+                }
+            </ul>
+
+            <h3>Add component</h3>
+            <EditForm Model="_newComponent" OnValidSubmit="AddComponentAsync">
+                <div class="field-grid">
+                    <InputText @bind-Value="_newComponent.Name" class="text-input" placeholder="Component name" />
+                    <InputText @bind-Value="_newComponent.Type" class="text-input" placeholder="Type" />
+                    <InputText @bind-Value="_newComponent.TrustZone" class="text-input" placeholder="Trust zone" />
+                    <InputText @bind-Value="_newComponent.DataSensitivityLevel" class="text-input" placeholder="Sensitivity" />
+                </div>
+                <button class="btn-small" type="submit">Add component</button>
+            </EditForm>
+
+            <h2>Data Flows (@_architecture.Flows.Count)</h2>
+            <ul>
+                @foreach (var flow in _architecture.Flows)
+                {
+                    <li>@ResolveComponentName(flow.FromComponentId) -> @ResolveComponentName(flow.ToComponentId) (@string.Join(", ", flow.DataCategories))</li>
+                }
+            </ul>
+
+            <h3>Add flow</h3>
+            <EditForm Model="_newFlow" OnValidSubmit="AddFlowAsync">
+                <div class="field-grid">
+                    <InputSelect @bind-Value="_newFlow.FromComponentId" class="text-input">
+                        <option value="@Guid.Empty">From component</option>
+                        @foreach (var component in _architecture.Components)
+                        {
+                            <option value="@component.Id">@component.Name</option>
+                        }
+                    </InputSelect>
+                    <InputSelect @bind-Value="_newFlow.ToComponentId" class="text-input">
+                        <option value="@Guid.Empty">To component</option>
+                        @foreach (var component in _architecture.Components)
+                        {
+                            <option value="@component.Id">@component.Name</option>
+                        }
+                    </InputSelect>
+                    <InputText @bind-Value="_newFlow.DataCategoriesCsv" class="text-input" placeholder="personal_data,financial_data" />
+                    <InputText @bind-Value="_newFlow.Purpose" class="text-input" placeholder="Purpose" />
+                </div>
+                <label><InputCheckbox @bind-Value="_newFlow.EncryptionInTransit" /> Encryption in transit</label>
+                <button class="btn-small" type="submit">Add flow</button>
+            </EditForm>
+
+            <h2>Data Stores (@_architecture.Stores.Count)</h2>
+            <ul>
+                @foreach (var store in _architecture.Stores)
+                {
+                    <li>@ResolveComponentName(store.ComponentId) - @store.StorageType (@store.Region), retention @store.RetentionDays days</li>
+                }
+            </ul>
+
+            <h3>Add data store</h3>
+            <EditForm Model="_newStore" OnValidSubmit="AddStoreAsync">
+                <div class="field-grid">
+                    <InputSelect @bind-Value="_newStore.ComponentId" class="text-input">
+                        <option value="@Guid.Empty">Component</option>
+                        @foreach (var component in _architecture.Components)
+                        {
+                            <option value="@component.Id">@component.Name</option>
+                        }
+                    </InputSelect>
+                    <InputText @bind-Value="_newStore.StorageType" class="text-input" placeholder="Storage type" />
+                    <InputText @bind-Value="_newStore.Region" class="text-input" placeholder="Region" />
+                    <InputNumber @bind-Value="_newStore.RetentionDays" class="text-input" />
+                    <InputText @bind-Value="_newStore.AccessModel" class="text-input" placeholder="Access model" />
+                </div>
+                <label><InputCheckbox @bind-Value="_newStore.EncryptionAtRest" /> Encryption at rest</label>
+                <button class="btn-small" type="submit">Add data store</button>
+            </EditForm>
+
+            <h2>Data & Vendors</h2>
+            <p>Data items: @_inventory.DataItems.Count | Vendors: @_inventory.Vendors.Count</p>
+
+            <ul>
+                @foreach (var item in _inventory.DataItems)
+                {
+                    <li>@item.DataCategory - lawful basis: @item.LawfulBasis - retention: @item.RetentionDays days - transfer outside EU: @item.TransferOutsideEu</li>
+                }
+            </ul>
+
+            <h3>Add data inventory item</h3>
+            <EditForm Model="_newDataItem" OnValidSubmit="AddDataItemAsync">
+                <div class="field-grid">
+                    <InputText @bind-Value="_newDataItem.DataCategory" class="text-input" placeholder="Data category" />
+                    <InputText @bind-Value="_newDataItem.Source" class="text-input" placeholder="Source" />
+                    <InputText @bind-Value="_newDataItem.LawfulBasis" class="text-input" placeholder="Lawful basis" />
+                    <InputNumber @bind-Value="_newDataItem.RetentionDays" class="text-input" />
+                </div>
+                <label><InputCheckbox @bind-Value="_newDataItem.ContainsPersonalData" /> Contains personal data</label>
+                <label><InputCheckbox @bind-Value="_newDataItem.SpecialCategory" /> Special category data</label>
+                <label><InputCheckbox @bind-Value="_newDataItem.TransferOutsideEu" /> Transfer outside EU</label>
+                <button class="btn-small" type="submit">Add data item</button>
+            </EditForm>
+
+            <ul>
+                @foreach (var vendor in _inventory.Vendors)
+                {
+                    <li>@vendor.Name (@vendor.ServiceType) - @vendor.Region - sub-processors: @string.Join(", ", vendor.SubProcessors)</li>
+                }
+            </ul>
+
+            <h3>Add vendor</h3>
+            <EditForm Model="_newVendor" OnValidSubmit="AddVendorAsync">
+                <div class="field-grid">
+                    <InputText @bind-Value="_newVendor.Name" class="text-input" placeholder="Vendor name" />
+                    <InputText @bind-Value="_newVendor.ServiceType" class="text-input" placeholder="Service type" />
+                    <InputText @bind-Value="_newVendor.Region" class="text-input" placeholder="Region" />
+                    <InputText @bind-Value="_newVendor.SubProcessorsCsv" class="text-input" placeholder="sub-processor-a, sub-processor-b" />
+                </div>
+                <label><InputCheckbox @bind-Value="_newVendor.DpaInPlace" /> DPA in place</label>
+                <button class="btn-small" type="submit">Add vendor</button>
+            </EditForm>
+
+            <h2>Evidence</h2>
+            <InputFile OnChange="UploadDocumentAsync" />
+            @if (!string.IsNullOrWhiteSpace(_uploadMessage))
+            {
+                <p>@_uploadMessage</p>
+            }
+
+            <p>Documents: @_documents.Count</p>
+            <ul>
+                @foreach (var doc in _documents)
+                {
+                    <li>@doc.FileName (@doc.MimeType) - excerpts: @doc.ExcerptCount</li>
+                }
+            </ul>
+
+            <h3>Excerpts</h3>
+            <div class="field-grid">
+                <InputSelect @bind-Value="_selectedDocumentId" class="text-input">
+                    <option value="">Select document</option>
+                    @foreach (var doc in _documents)
+                    {
+                        <option value="@doc.Id">@doc.FileName</option>
+                    }
+                </InputSelect>
+                <button class="btn-small" @onclick="LoadExcerptsAsync">Load excerpts</button>
+            </div>
+
+            <EditForm Model="_newExcerpt" OnValidSubmit="CreateExcerptAsync">
+                <div class="field-grid">
+                    <InputText @bind-Value="_newExcerpt.Title" class="text-input" placeholder="Excerpt title" />
+                    <InputText @bind-Value="_newExcerpt.PageRef" class="text-input" placeholder="Page ref" />
+                    <InputTextArea @bind-Value="_newExcerpt.Text" class="text-input" />
+                </div>
+                <button class="btn-small" type="submit">Create excerpt</button>
+            </EditForm>
+
+            <ul>
+                @foreach (var excerpt in _excerpts)
+                {
+                    <li>@excerpt.Title [@excerpt.PageRef] - @excerpt.Text</li>
+                }
+            </ul>
+
+            <h3>Link evidence</h3>
+            <EditForm Model="_linkEvidence" OnValidSubmit="LinkEvidenceAsync">
+                <div class="field-grid">
+                    <InputSelect @bind-Value="_linkEvidence.EvidenceExcerptId" class="text-input">
+                        <option value="">Select excerpt</option>
+                        @foreach (var excerpt in _excerpts)
+                        {
+                            <option value="@excerpt.Id">@excerpt.Title</option>
+                        }
+                    </InputSelect>
+                    <InputSelect @bind-Value="_linkEvidence.TargetType" @bind-Value:after="OnEvidenceTargetTypeChanged" class="text-input">
+                        <option value="ActionItem">ActionItem</option>
+                        <option value="Finding">Finding</option>
+                    </InputSelect>
+                    <InputSelect @bind-Value="_linkEvidence.TargetId" class="text-input">
+                        <option value="">Select target</option>
+                        @if (_linkEvidence.TargetType == "Finding")
+                        {
+                            @foreach (var finding in _findings)
+                            {
+                                <option value="@finding.Id">@finding.Title</option>
+                            }
+                        }
+                        else
+                        {
+                            @foreach (var action in _actions)
+                            {
+                                <option value="@action.Id">@action.Title</option>
+                            }
+                        }
+                    </InputSelect>
+                </div>
+                <button class="btn-small" type="submit">Create evidence link</button>
+            </EditForm>
+
+            <h3>Evidence Gaps</h3>
+            <ul>
+                @foreach (var gap in _evidenceGaps.ActionGaps)
+                {
+                    <li>Action gap: @gap.Title (need: @gap.SuggestedEvidence)</li>
+                }
+                @foreach (var gap in _evidenceGaps.ControlGaps)
+                {
+                    <li>Control gap: @gap.Title (need: @gap.SuggestedEvidence)</li>
+                }
+            </ul>
+
+            <h3>Evidence Search (RAG)</h3>
+            <div class="field-grid">
+                <InputText @bind-Value="_evidenceQuery" class="text-input" placeholder="Search evidence..." />
+                <button class="btn-small" @onclick="SearchEvidenceAsync">Search</button>
+            </div>
+            <ul>
+                @foreach (var hit in _evidenceHits)
+                {
+                    <li>[@hit.SourceType] score=@hit.Score.ToString("0.00") - @hit.ChunkText</li>
+                }
+            </ul>
+
+            <h2>Assessments</h2>
+            <ul>
+                @foreach (var assessment in _assessments)
+                {
+                    <li>@assessment.RanAt.ToString("u") - @assessment.RiskScoresJson</li>
+                }
+            </ul>
+
+            <h2>Findings (@_findings.Count)</h2>
+            <ul>
+                @foreach (var finding in _findings)
+                {
+                    <li>[ @finding.Severity ] @finding.Title</li>
+                }
+            </ul>
+
+            <h2>Actions Board</h2>
+            <div class="kanban-board">
+                <div class="kanban-col">
+                    <h4>New</h4>
+                    @foreach (var action in _actionBoard.New)
+                    {
+                        <article class="kanban-card">
+                            <strong>@action.Title</strong>
+                            <span>@action.Priority / @action.OwnerRole</span>
+                            <div class="btn-row">
+                                <button class="btn-small" @onclick="() => UpdateActionStatusAsync(action.Id, 1)">Start</button>
+                            </div>
+                        </article>
+                    }
+                </div>
+
+                <div class="kanban-col">
+                    <h4>In Progress</h4>
+                    @foreach (var action in _actionBoard.InProgress)
+                    {
+                        <article class="kanban-card">
+                            <strong>@action.Title</strong>
+                            <span>@action.Priority / @action.OwnerRole</span>
+                            <div class="btn-row">
+                                <button class="btn-small" @onclick="() => UpdateActionStatusAsync(action.Id, 2)">Done</button>
+                                <button class="btn-small" @onclick="() => ReviewActionAsync(action.Id, 1)">Approve</button>
+                                <button class="btn-small" @onclick="() => ReviewActionAsync(action.Id, 0)">Needs edits</button>
+                                <button class="btn-small" @onclick="() => ReviewActionAsync(action.Id, 2)">Reject</button>
+                            </div>
+                        </article>
+                    }
+                </div>
+
+                <div class="kanban-col">
+                    <h4>Done</h4>
+                    @foreach (var action in _actionBoard.Done)
+                    {
+                        <article class="kanban-card">
+                            <strong>@action.Title</strong>
+                            <span>Approved: @action.ApprovedAt?.ToString("u")</span>
+                        </article>
+                    }
+                </div>
+
+                <div class="kanban-col">
+                    <h4>Accepted Risk</h4>
+                    @foreach (var action in _actionBoard.AcceptedRisk)
+                    {
+                        <article class="kanban-card">
+                            <strong>@action.Title</strong>
+                        </article>
+                    }
+                </div>
+            </div>
+
+            @if (_recentReviews.Count > 0)
+            {
+                <h3>Recent Reviews</h3>
+                <ul>
+                    @foreach (var review in _recentReviews.Take(10))
+                    {
+                        <li>@review.ReviewedAt.ToString("u") - @review.Decision - @review.Comment</li>
+                    }
+                </ul>
+            }
+
+            <h2>Exports</h2>
+            <div class="field-grid">
+                <InputSelect @bind-Value="_exportForm.Format" class="text-input">
+                    <option value="pdf">PDF</option>
+                    <option value="json">JSON</option>
+                </InputSelect>
+                <InputText @bind-Value="_exportForm.ExportType" class="text-input" placeholder="DPIA_Draft" />
+            </div>
+            <label><InputCheckbox @bind-Value="_exportForm.SendWebhook" /> Send to enabled webhooks</label>
+
+            <h3>Generated Exports</h3>
+            <ul>
+                @foreach (var item in _exports)
+                {
+                    <li>@item.CreatedAt.ToString("u") - @item.ExportType (@item.MimeType)</li>
+                }
+            </ul>
+        }
+    </div>
+}
+
+@code {
+    [Parameter] public Guid SystemId { get; set; }
+
+    private bool _loading = true;
+    private string _error = string.Empty;
+    private string _uploadMessage = string.Empty;
+
+    private Normyx.Web.Models.AiSystemDetailDto? _system;
+    private List<Normyx.Web.Models.VersionSummaryDto> _versions = [];
+    private Guid? _currentVersionId;
+    private Guid? _compareVersionId;
+
+    private Normyx.Web.Models.ArchitectureResponse _architecture = new([], [], []);
+    private Normyx.Web.Models.InventoryResponse _inventory = new([], []);
+    private List<Normyx.Web.Models.AssessmentListItem> _assessments = [];
+    private List<Normyx.Web.Models.FindingDto> _findings = [];
+    private List<Normyx.Web.Models.ActionItemDto> _actions = [];
+    private Normyx.Web.Models.ActionBoardDto _actionBoard = new([], [], [], []);
+    private Normyx.Web.Models.EvidenceGapsResponse _evidenceGaps = new(0, [], []);
+    private List<Normyx.Web.Models.RagSearchResultDto> _evidenceHits = [];
+    private List<Normyx.Web.Models.DocumentListItemDto> _documents = [];
+    private List<Normyx.Web.Models.EvidenceExcerptDto> _excerpts = [];
+    private Guid? _selectedDocumentId;
+    private List<Normyx.Web.Models.ExportListItemDto> _exports = [];
+    private List<Normyx.Web.Models.ActionReviewDto> _recentReviews = [];
+
+    private Normyx.Web.Models.AssessmentRunResult? _lastRun;
+    private Normyx.Web.Models.AssessmentDiffDto? _diff;
+
+    private readonly QuestionnaireForm _questionnaire = new();
+    private readonly NewComponentForm _newComponent = new();
+    private readonly NewFlowForm _newFlow = new();
+    private readonly NewStoreForm _newStore = new();
+    private readonly NewDataItemForm _newDataItem = new();
+    private readonly NewVendorForm _newVendor = new();
+    private readonly NewExcerptForm _newExcerpt = new();
+    private readonly LinkEvidenceForm _linkEvidence = new();
+    private readonly ExportForm _exportForm = new();
+    private string _evidenceQuery = "DPIA lawful basis transfer";
+
+    protected override async Task OnParametersSetAsync()
+    {
+        if (!Session.IsAuthenticated)
+        {
+            _loading = false;
+            return;
+        }
+
+        _loading = true;
+        await LoadSystemAsync();
+        _loading = false;
+    }
+
+    private async Task LoadSystemAsync()
+    {
+        try
+        {
+            _error = string.Empty;
+            _system = await Api.GetAsync<Normyx.Web.Models.AiSystemDetailDto>($"/aisystems/{SystemId}");
+            _versions = (await Api.GetAsync<List<Normyx.Web.Models.VersionSummaryDto>>($"/aisystems/{SystemId}/versions")) ?? [];
+
+            if (_currentVersionId is null)
+            {
+                _currentVersionId = _versions.OrderByDescending(x => x.VersionNumber).FirstOrDefault()?.Id;
+            }
+
+            if (_currentVersionId is not null)
+            {
+                await LoadVersionDataAsync(_currentVersionId.Value);
+            }
+        }
+        catch (Exception ex)
+        {
+            _error = ex.Message;
+        }
+    }
+
+    private async Task SelectVersionAsync(Guid versionId)
+    {
+        _currentVersionId = versionId;
+        await LoadVersionDataAsync(versionId);
+    }
+
+    private async Task LoadVersionDataAsync(Guid versionId)
+    {
+        _architecture = await Api.GetAsync<Normyx.Web.Models.ArchitectureResponse>($"/versions/{versionId}/architecture") ?? new([], [], []);
+        _inventory = await Api.GetAsync<Normyx.Web.Models.InventoryResponse>($"/versions/{versionId}/inventory") ?? new([], []);
+        _assessments = (await Api.GetAsync<List<Normyx.Web.Models.AssessmentListItem>>($"/versions/{versionId}/assessments")) ?? [];
+        _actions = (await Api.GetAsync<List<Normyx.Web.Models.ActionItemDto>>($"/actions/version/{versionId}")) ?? [];
+        _actionBoard = (await Api.GetAsync<Normyx.Web.Models.ActionBoardDto>($"/actions/board/{versionId}")) ?? new([], [], [], []);
+        _evidenceGaps = await Api.GetAsync<Normyx.Web.Models.EvidenceGapsResponse>($"/versions/{versionId}/evidence/gaps") ?? new(0, [], []);
+        _exports = (await Api.GetAsync<List<Normyx.Web.Models.ExportListItemDto>>($"/exports/versions/{versionId}")) ?? [];
+        _documents = (await Api.GetAsync<List<Normyx.Web.Models.DocumentListItemDto>>("/documents")) ?? [];
+
+        if (_selectedDocumentId is null || !_documents.Any(x => x.Id == _selectedDocumentId.Value))
+        {
+            _selectedDocumentId = _documents.FirstOrDefault()?.Id;
+        }
+
+        await LoadExcerptsAsync();
+
+        var questionnaire = await Api.GetAsync<Normyx.Web.Models.QuestionnaireResponse>($"/versions/{versionId}/questionnaire");
+        if (questionnaire is not null)
+        {
+            _questionnaire.AutomatedDecisionMaking = questionnaire.Answers.TryGetValue("automatedDecisionMaking", out var auto) ? auto : "false";
+            _questionnaire.CriticalSector = questionnaire.Answers.TryGetValue("criticalSector", out var critical) ? critical : "false";
+        }
+
+        if (_assessments.Count > 0)
+        {
+            var latest = _assessments.OrderByDescending(x => x.RanAt).First();
+            _findings = (await Api.GetAsync<List<Normyx.Web.Models.FindingDto>>($"/findings/assessment/{latest.Id}")) ?? [];
+        }
+        else
+        {
+            _findings = [];
+        }
+
+        _recentReviews = [];
+        foreach (var action in _actions.Take(6))
+        {
+            var reviews = await Api.GetAsync<List<Normyx.Web.Models.ActionReviewDto>>($"/actions/{action.Id}/reviews");
+            if (reviews is not null)
+            {
+                _recentReviews.AddRange(reviews);
+            }
+        }
+
+        _recentReviews = _recentReviews.OrderByDescending(x => x.ReviewedAt).ToList();
+        EnsureEvidenceLinkDefaults();
+    }
+
+    private async Task RunAssessmentAsync()
+    {
+        if (_currentVersionId is null)
+        {
+            return;
+        }
+
+        try
+        {
+            _lastRun = await Api.PostAsync<Normyx.Web.Models.AssessmentRunResult>($"/versions/{_currentVersionId}/assessments/run", new { });
+            await LoadVersionDataAsync(_currentVersionId.Value);
+        }
+        catch (Exception ex)
+        {
+            _error = ex.Message;
+        }
+    }
+
+    private async Task RunDiffAsync()
+    {
+        if (_currentVersionId is null || _compareVersionId is null)
+        {
+            return;
+        }
+
+        try
+        {
+            _diff = await Api.GetAsync<Normyx.Web.Models.AssessmentDiffDto>($"/versions/{_currentVersionId}/assessments/diff/{_compareVersionId}");
+        }
+        catch (Exception ex)
+        {
+            _error = ex.Message;
+        }
+    }
+
+    private async Task GenerateExportAsync()
+    {
+        if (_currentVersionId is null)
+        {
+            return;
+        }
+
+        try
+        {
+            var export = await Api.PostAsync<Normyx.Web.Models.ExportArtifactDto>($"/exports/versions/{_currentVersionId}/generate", new
+            {
+                exportType = _exportForm.ExportType,
+                format = _exportForm.Format,
+                sendWebhook = _exportForm.SendWebhook
+            });
+
+            if (export is not null)
+            {
+                _uploadMessage = $"Export generated: {export.Id} ({export.MimeType})";
+            }
+
+            await LoadVersionDataAsync(_currentVersionId.Value);
+        }
+        catch (Exception ex)
+        {
+            _error = ex.Message;
+        }
+    }
+
+    private async Task SaveQuestionnaireAsync()
+    {
+        if (_currentVersionId is null)
+        {
+            return;
+        }
+
+        try
+        {
+            await Api.PutAsync($"/versions/{_currentVersionId}/questionnaire", new
+            {
+                answers = new Dictionary<string, string>
+                {
+                    ["automatedDecisionMaking"] = _questionnaire.AutomatedDecisionMaking,
+                    ["criticalSector"] = _questionnaire.CriticalSector
+                }
+            });
+        }
+        catch (Exception ex)
+        {
+            _error = ex.Message;
+        }
+    }
+
+    private async Task AddComponentAsync()
+    {
+        if (_currentVersionId is null)
+        {
+            return;
+        }
+
+        try
+        {
+            await Api.PostAsync($"/versions/{_currentVersionId}/architecture/components", new
+            {
+                name = _newComponent.Name,
+                type = _newComponent.Type,
+                description = _newComponent.Description,
+                trustZone = _newComponent.TrustZone,
+                isExternal = _newComponent.IsExternal,
+                dataSensitivityLevel = _newComponent.DataSensitivityLevel
+            });
+
+            _newComponent.Reset();
+            await LoadVersionDataAsync(_currentVersionId.Value);
+        }
+        catch (Exception ex)
+        {
+            _error = ex.Message;
+        }
+    }
+
+    private async Task AddFlowAsync()
+    {
+        if (_currentVersionId is null || _newFlow.FromComponentId == Guid.Empty || _newFlow.ToComponentId == Guid.Empty)
+        {
+            return;
+        }
+
+        try
+        {
+            var categories = _newFlow.DataCategoriesCsv
+                .Split(',', StringSplitOptions.TrimEntries | StringSplitOptions.RemoveEmptyEntries);
+
+            await Api.PostAsync($"/versions/{_currentVersionId}/architecture/flows", new
+            {
+                fromComponentId = _newFlow.FromComponentId,
+                toComponentId = _newFlow.ToComponentId,
+                dataCategories = categories,
+                purpose = _newFlow.Purpose,
+                encryptionInTransit = _newFlow.EncryptionInTransit,
+                notes = _newFlow.Notes
+            });
+
+            _newFlow.Reset();
+            await LoadVersionDataAsync(_currentVersionId.Value);
+        }
+        catch (Exception ex)
+        {
+            _error = ex.Message;
+        }
+    }
+
+    private async Task AddStoreAsync()
+    {
+        if (_currentVersionId is null || _newStore.ComponentId == Guid.Empty)
+        {
+            return;
+        }
+
+        try
+        {
+            await Api.PostAsync($"/versions/{_currentVersionId}/architecture/stores", new
+            {
+                componentId = _newStore.ComponentId,
+                storageType = _newStore.StorageType,
+                region = _newStore.Region,
+                retentionDays = _newStore.RetentionDays,
+                encryptionAtRest = _newStore.EncryptionAtRest,
+                accessModel = _newStore.AccessModel
+            });
+
+            _newStore.Reset();
+            await LoadVersionDataAsync(_currentVersionId.Value);
+        }
+        catch (Exception ex)
+        {
+            _error = ex.Message;
+        }
+    }
+
+    private async Task AddDataItemAsync()
+    {
+        if (_currentVersionId is null || string.IsNullOrWhiteSpace(_newDataItem.DataCategory))
+        {
+            return;
+        }
+
+        try
+        {
+            await Api.PostAsync($"/versions/{_currentVersionId}/inventory/data-items", new
+            {
+                dataCategory = _newDataItem.DataCategory,
+                containsPersonalData = _newDataItem.ContainsPersonalData,
+                specialCategory = _newDataItem.SpecialCategory,
+                source = _newDataItem.Source,
+                lawfulBasis = _newDataItem.LawfulBasis,
+                retentionDays = _newDataItem.RetentionDays,
+                transferOutsideEu = _newDataItem.TransferOutsideEu,
+                notes = _newDataItem.Notes
+            });
+
+            _newDataItem.Reset();
+            await LoadVersionDataAsync(_currentVersionId.Value);
+        }
+        catch (Exception ex)
+        {
+            _error = ex.Message;
+        }
+    }
+
+    private async Task AddVendorAsync()
+    {
+        if (_currentVersionId is null || string.IsNullOrWhiteSpace(_newVendor.Name))
+        {
+            return;
+        }
+
+        try
+        {
+            var subProcessors = _newVendor.SubProcessorsCsv
+                .Split(',', StringSplitOptions.TrimEntries | StringSplitOptions.RemoveEmptyEntries);
+
+            await Api.PostAsync($"/versions/{_currentVersionId}/inventory/vendors", new
+            {
+                name = _newVendor.Name,
+                serviceType = _newVendor.ServiceType,
+                region = _newVendor.Region,
+                subProcessors,
+                dpaInPlace = _newVendor.DpaInPlace,
+                notes = _newVendor.Notes
+            });
+
+            _newVendor.Reset();
+            await LoadVersionDataAsync(_currentVersionId.Value);
+        }
+        catch (Exception ex)
+        {
+            _error = ex.Message;
+        }
+    }
+
+    private async Task LoadExcerptsAsync()
+    {
+        if (_selectedDocumentId is null)
+        {
+            _excerpts = [];
+            _linkEvidence.EvidenceExcerptId = null;
+            return;
+        }
+
+        _excerpts = (await Api.GetAsync<List<Normyx.Web.Models.EvidenceExcerptDto>>($"/documents/{_selectedDocumentId}/excerpts")) ?? [];
+        if (_linkEvidence.EvidenceExcerptId is null || !_excerpts.Any(x => x.Id == _linkEvidence.EvidenceExcerptId.Value))
+        {
+            _linkEvidence.EvidenceExcerptId = _excerpts.FirstOrDefault()?.Id;
+        }
+    }
+
+    private async Task CreateExcerptAsync()
+    {
+        if (_selectedDocumentId is null || string.IsNullOrWhiteSpace(_newExcerpt.Title) || string.IsNullOrWhiteSpace(_newExcerpt.Text))
+        {
+            return;
+        }
+
+        try
+        {
+            await Api.PostAsync($"/documents/{_selectedDocumentId}/excerpts", new
+            {
+                title = _newExcerpt.Title,
+                text = _newExcerpt.Text,
+                pageRef = _newExcerpt.PageRef
+            });
+
+            _newExcerpt.Reset();
+            _uploadMessage = "Evidence excerpt created.";
+            await LoadExcerptsAsync();
+        }
+        catch (Exception ex)
+        {
+            _error = ex.Message;
+        }
+    }
+
+    private async Task LinkEvidenceAsync()
+    {
+        if (_linkEvidence.EvidenceExcerptId is null || _linkEvidence.TargetId is null)
+        {
+            return;
+        }
+
+        try
+        {
+            await Api.PostAsync("/documents/evidence-links", new
+            {
+                targetType = _linkEvidence.TargetType,
+                targetId = _linkEvidence.TargetId,
+                evidenceExcerptId = _linkEvidence.EvidenceExcerptId
+            });
+
+            _uploadMessage = "Evidence link created.";
+            if (_currentVersionId is not null)
+            {
+                await LoadVersionDataAsync(_currentVersionId.Value);
+            }
+        }
+        catch (Exception ex)
+        {
+            _error = ex.Message;
+        }
+    }
+
+    private async Task UpdateActionStatusAsync(Guid actionId, int status)
+    {
+        try
+        {
+            await Api.PutAsync($"/actions/{actionId}/status", new { status });
+            if (_currentVersionId is not null)
+            {
+                await LoadVersionDataAsync(_currentVersionId.Value);
+            }
+        }
+        catch (Exception ex)
+        {
+            _error = ex.Message;
+        }
+    }
+
+    private async Task ApproveActionAsync(Guid actionId)
+    {
+        try
+        {
+            await Api.PostAsync($"/actions/{actionId}/approve", new { comment = "Approved from UI" });
+            if (_currentVersionId is not null)
+            {
+                await LoadVersionDataAsync(_currentVersionId.Value);
+            }
+        }
+        catch (Exception ex)
+        {
+            _error = ex.Message;
+        }
+    }
+
+    private async Task ReviewActionAsync(Guid actionId, int decision)
+    {
+        try
+        {
+            await Api.PostAsync($"/actions/{actionId}/reviews", new
+            {
+                decision,
+                comment = $"Review submitted from UI ({decision})"
+            });
+            if (_currentVersionId is not null)
+            {
+                await LoadVersionDataAsync(_currentVersionId.Value);
+            }
+        }
+        catch (Exception ex)
+        {
+            _error = ex.Message;
+        }
+    }
+
+    private async Task SearchEvidenceAsync()
+    {
+        if (_currentVersionId is null || string.IsNullOrWhiteSpace(_evidenceQuery))
+        {
+            return;
+        }
+
+        try
+        {
+            _evidenceHits = (await Api.GetAsync<List<Normyx.Web.Models.RagSearchResultDto>>($"/versions/{_currentVersionId}/evidence/search?query={Uri.EscapeDataString(_evidenceQuery)}&topK=6")) ?? [];
+        }
+        catch (Exception ex)
+        {
+            _error = ex.Message;
+        }
+    }
+
+    private async Task UploadDocumentAsync(InputFileChangeEventArgs args)
+    {
+        try
+        {
+            var file = args.File;
+            var response = await Api.UploadFileAsync<Normyx.Web.Models.DocumentUploadResponse>("/documents/upload", file, "evidence,demo");
+            _uploadMessage = response is null ? "Upload complete." : $"Uploaded: {response.FileName}";
+
+            if (_currentVersionId is not null)
+            {
+                await LoadVersionDataAsync(_currentVersionId.Value);
+            }
+        }
+        catch (Exception ex)
+        {
+            _error = ex.Message;
+        }
+    }
+
+    private string ResolveComponentName(Guid componentId)
+        => _architecture.Components.FirstOrDefault(c => c.Id == componentId)?.Name ?? componentId.ToString()[..8];
+
+    private void EnsureEvidenceLinkDefaults()
+    {
+        if (_linkEvidence.TargetType == "Finding")
+        {
+            if (_linkEvidence.TargetId is null || !_findings.Any(x => x.Id == _linkEvidence.TargetId.Value))
+            {
+                _linkEvidence.TargetId = _findings.FirstOrDefault()?.Id;
+            }
+            return;
+        }
+
+        _linkEvidence.TargetType = "ActionItem";
+        if (_linkEvidence.TargetId is null || !_actions.Any(x => x.Id == _linkEvidence.TargetId.Value))
+        {
+            _linkEvidence.TargetId = _actions.FirstOrDefault()?.Id;
+        }
+    }
+
+    private Task OnEvidenceTargetTypeChanged()
+    {
+        if (_linkEvidence.TargetType == "Finding")
+        {
+            _linkEvidence.TargetId = _findings.FirstOrDefault()?.Id;
+        }
+        else
+        {
+            _linkEvidence.TargetType = "ActionItem";
+            _linkEvidence.TargetId = _actions.FirstOrDefault()?.Id;
+        }
+
+        return Task.CompletedTask;
+    }
+
+    private sealed class QuestionnaireForm
+    {
+        public string AutomatedDecisionMaking { get; set; } = "true";
+        public string CriticalSector { get; set; } = "true";
+    }
+
+    private sealed class ExportForm
+    {
+        public string ExportType { get; set; } = "DPIA_Draft";
+        public string Format { get; set; } = "pdf";
+        public bool SendWebhook { get; set; }
+    }
+
+    private sealed class NewComponentForm
+    {
+        public string Name { get; set; } = string.Empty;
+        public string Type { get; set; } = "Service";
+        public string Description { get; set; } = string.Empty;
+        public string TrustZone { get; set; } = "Internal";
+        public bool IsExternal { get; set; }
+        public string DataSensitivityLevel { get; set; } = "Medium";
+
+        public void Reset()
+        {
+            Name = string.Empty;
+            Type = "Service";
+            Description = string.Empty;
+            TrustZone = "Internal";
+            IsExternal = false;
+            DataSensitivityLevel = "Medium";
+        }
+    }
+
+    private sealed class NewFlowForm
+    {
+        public Guid FromComponentId { get; set; } = Guid.Empty;
+        public Guid ToComponentId { get; set; } = Guid.Empty;
+        public string DataCategoriesCsv { get; set; } = "personal_data";
+        public string Purpose { get; set; } = "Model inference";
+        public bool EncryptionInTransit { get; set; } = true;
+        public string Notes { get; set; } = string.Empty;
+
+        public void Reset()
+        {
+            FromComponentId = Guid.Empty;
+            ToComponentId = Guid.Empty;
+            DataCategoriesCsv = "personal_data";
+            Purpose = "Model inference";
+            EncryptionInTransit = true;
+            Notes = string.Empty;
+        }
+    }
+
+    private sealed class NewStoreForm
+    {
+        public Guid ComponentId { get; set; } = Guid.Empty;
+        public string StorageType { get; set; } = "PostgreSQL";
+        public string Region { get; set; } = "eu-north-1";
+        public int RetentionDays { get; set; } = 365;
+        public bool EncryptionAtRest { get; set; } = true;
+        public string AccessModel { get; set; } = "RBAC";
+
+        public void Reset()
+        {
+            ComponentId = Guid.Empty;
+            StorageType = "PostgreSQL";
+            Region = "eu-north-1";
+            RetentionDays = 365;
+            EncryptionAtRest = true;
+            AccessModel = "RBAC";
+        }
+    }
+
+    private sealed class NewDataItemForm
+    {
+        public string DataCategory { get; set; } = "personal_data";
+        public bool ContainsPersonalData { get; set; } = true;
+        public bool SpecialCategory { get; set; }
+        public string Source { get; set; } = "Web form";
+        public string LawfulBasis { get; set; } = "legitimate_interest";
+        public int RetentionDays { get; set; } = 365;
+        public bool TransferOutsideEu { get; set; } = true;
+        public string Notes { get; set; } = string.Empty;
+
+        public void Reset()
+        {
+            DataCategory = "personal_data";
+            ContainsPersonalData = true;
+            SpecialCategory = false;
+            Source = "Web form";
+            LawfulBasis = "legitimate_interest";
+            RetentionDays = 365;
+            TransferOutsideEu = true;
+            Notes = string.Empty;
+        }
+    }
+
+    private sealed class NewVendorForm
+    {
+        public string Name { get; set; } = "LLM Provider";
+        public string ServiceType { get; set; } = "LLM";
+        public string Region { get; set; } = "US";
+        public string SubProcessorsCsv { get; set; } = "inference-cluster";
+        public bool DpaInPlace { get; set; } = true;
+        public string Notes { get; set; } = string.Empty;
+
+        public void Reset()
+        {
+            Name = "LLM Provider";
+            ServiceType = "LLM";
+            Region = "US";
+            SubProcessorsCsv = "inference-cluster";
+            DpaInPlace = true;
+            Notes = string.Empty;
+        }
+    }
+
+    private sealed class NewExcerptForm
+    {
+        public string Title { get; set; } = "Manual excerpt";
+        public string Text { get; set; } = string.Empty;
+        public string PageRef { get; set; } = "manual";
+
+        public void Reset()
+        {
+            Title = "Manual excerpt";
+            Text = string.Empty;
+            PageRef = "manual";
+        }
+    }
+
+    private sealed class LinkEvidenceForm
+    {
+        public Guid? EvidenceExcerptId { get; set; }
+        public string TargetType { get; set; } = "ActionItem";
+        public Guid? TargetId { get; set; }
+    }
+}

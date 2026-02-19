@@ -1,0 +1,2 @@
+Generate an action plan JSON from this input:
+{{INPUT_JSON}}

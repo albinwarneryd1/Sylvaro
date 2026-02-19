@@ -1,0 +1,21 @@
+{
+  "name": "GDPR Core",
+  "version": "2026.1",
+  "scope": "GDPR",
+  "rules": [
+    {
+      "ruleKey": "GDPR-TRANSFER-001",
+      "description": "Transfers outside EU require safeguards and transfer impact assessment.",
+      "severity": "High",
+      "condition": { "field": "inventory.transfer_outside_eu", "operator": "eq", "value": true },
+      "outputControlKeys": ["GDPR-TRANSFER-SAFEGUARDS"]
+    },
+    {
+      "ruleKey": "GDPR-LAWFUL-001",
+      "description": "Lawful basis must be documented for each personal-data category.",
+      "severity": "High",
+      "condition": { "field": "inventory.missing_lawful_basis", "operator": "eq", "value": true },
+      "outputControlKeys": ["GDPR-LEGAL-BASIS"]
+    }
+  ]
+}

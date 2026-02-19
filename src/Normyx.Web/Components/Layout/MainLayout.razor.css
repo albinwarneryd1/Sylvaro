@@ -1,0 +1,64 @@
+.app-shell {
+    display: grid;
+    grid-template-columns: 280px 1fr;
+    min-height: 100vh;
+    background: radial-gradient(circle at 20% 10%, #e8f7ef, #f8f5ec 45%, #f7eef2 100%);
+}
+
+.sidebar-panel {
+    border-right: 1px solid rgba(22, 29, 36, 0.12);
+    background: linear-gradient(180deg, #0f1f1a 0%, #1a2f2a 100%);
+}
+
+.main-panel {
+    display: flex;
+    flex-direction: column;
+}
+
+.topbar {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 1rem 1.5rem;
+    border-bottom: 1px solid rgba(22, 29, 36, 0.12);
+    background: rgba(255, 255, 255, 0.7);
+    backdrop-filter: blur(7px);
+}
+
+.brand-area {
+    display: flex;
+    align-items: baseline;
+    gap: 0.8rem;
+}
+
+.brand-tag {
+    font-size: 1.15rem;
+    font-weight: 700;
+}
+
+.brand-sub {
+    font-size: 0.85rem;
+    color: #304b41;
+}
+
+.session-meta {
+    display: flex;
+    gap: 1rem;
+    color: #304b41;
+    font-size: 0.9rem;
+}
+
+.content-panel {
+    padding: 1.5rem;
+}
+
+@media (max-width: 980px) {
+    .app-shell {
+        grid-template-columns: 1fr;
+    }
+
+    .sidebar-panel {
+        border-right: none;
+        border-bottom: 1px solid rgba(22, 29, 36, 0.12);
+    }
+}

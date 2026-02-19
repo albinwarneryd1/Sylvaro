@@ -1,0 +1,14 @@
+{
+  "name": "NIS2 Core",
+  "version": "2026.1",
+  "scope": "NIS2",
+  "rules": [
+    {
+      "ruleKey": "NIS2-SUPPLIER-001",
+      "description": "Third-party supplier risk controls are required for external dependencies.",
+      "severity": "Medium",
+      "condition": { "field": "questionnaire.critical_sector", "operator": "eq", "value": true },
+      "outputControlKeys": ["NIS2-SUPPLIER-MGMT", "NIS2-INCIDENT-PLAYBOOK"]
+    }
+  ]
+}

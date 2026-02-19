@@ -1,0 +1,71 @@
+@page "/"
+@inject Normyx.Web.Services.NormyxApiClient Api
+@inject Normyx.Web.Services.AuthSession Session
+@inject NavigationManager Nav
+
+<PageTitle>Dashboard - Normyx AI</PageTitle>
+
+@if (!Session.IsAuthenticated)
+{
+    <div class="card-shell"><p>Please <a href="/login">log in</a> to continue.</p></div>
+}
+else if (_loading)
+{
+    <div class="card-shell"><p>Loading dashboard...</p></div>
+}
+else
+{
+    <div class="grid-cards">
+        <section class="metric-card">
+            <h2>Systems</h2>
+            <p>@_dashboard?.SystemCount</p>
+        </section>
+        <section class="metric-card">
+            <h2>Open Actions</h2>
+            <p>@_dashboard?.OpenActions</p>
+        </section>
+        <section class="metric-card wide">
+            <h2>Risk Distribution</h2>
+            @if (_dashboard?.RiskDistribution is { Count: > 0 } risks)
+            {
+                <ul>
+                    @foreach (var pair in risks)
+                    {
+                        <li>@pair.Key: @pair.Value</li>
+                    }
+                </ul>
+            }
+            else
+            {
+                <p>No risk data yet.</p>
+            }
+        </section>
+    </div>
+}
+
+@code {
+    private bool _loading = true;
+    private Normyx.Web.Models.DashboardTenantDto? _dashboard;
+
+    protected override async Task OnInitializedAsync()
+    {
+        if (!Session.IsAuthenticated)
+        {
+            _loading = false;
+            return;
+        }
+
+        try
+        {
+            _dashboard = await Api.GetAsync<Normyx.Web.Models.DashboardTenantDto>("/dashboard/tenant");
+        }
+        catch
+        {
+            Nav.NavigateTo("/login");
+        }
+        finally
+        {
+            _loading = false;
+        }
+    }
+}

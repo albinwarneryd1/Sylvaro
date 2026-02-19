@@ -1,0 +1,2 @@
+Generate a DPIA draft JSON from this input:
+{{INPUT_JSON}}

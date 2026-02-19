@@ -1,0 +1,27 @@
+{
+  "name": "EU AI Act Core",
+  "version": "2026.1",
+  "scope": "AI_ACT",
+  "rules": [
+    {
+      "ruleKey": "AIACT-PROHIBITED-001",
+      "description": "Potential prohibited AI use detected; deployment must stop pending legal analysis.",
+      "severity": "Critical",
+      "condition": { "field": "system.prohibited_pattern", "operator": "eq", "value": true },
+      "outputControlKeys": ["AIACT-PROHIBITED-REVIEW"]
+    },
+    {
+      "ruleKey": "AIACT-HIGHRISK-001",
+      "description": "High-risk AI obligations apply and require risk management controls.",
+      "severity": "High",
+      "condition": {
+        "op": "or",
+        "conditions": [
+          { "field": "system.high_risk_domain", "operator": "eq", "value": true },
+          { "field": "questionnaire.automated_decision", "operator": "eq", "value": true }
+        ]
+      },
+      "outputControlKeys": ["AIACT-RISK-MGMT"]
+    }
+  ]
+}

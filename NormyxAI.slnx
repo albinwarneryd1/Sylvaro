@@ -1,0 +1,12 @@
+<Solution>
+  <Folder Name="/src/">
+    <Project Path="src/Normyx.Api/Normyx.Api.csproj" />
+    <Project Path="src/Normyx.Application/Normyx.Application.csproj" />
+    <Project Path="src/Normyx.Domain/Normyx.Domain.csproj" />
+    <Project Path="src/Normyx.Infrastructure/Normyx.Infrastructure.csproj" />
+    <Project Path="src/Normyx.Web/Normyx.Web.csproj" />
+  </Folder>
+  <Folder Name="/tests/">
+    <Project Path="tests/Normyx.Tests/Normyx.Tests.csproj" />
+  </Folder>
+</Solution>
