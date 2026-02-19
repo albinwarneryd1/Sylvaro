@@ -130,6 +130,20 @@ public class AssessmentService(
             _ => 3
         }));
 
+        var selectedPolicyPackRefs = await dbContext.TenantPolicyPackSelections
+            .Where(x => x.TenantId == tenantId && x.IsEnabled)
+            .Join(dbContext.PolicyPacks, s => s.PolicyPackId, p => p.Id, (_, p) => p.Name + " " + p.Version)
+            .Distinct()
+            .ToArrayAsync(cancellationToken);
+
+        if (selectedPolicyPackRefs.Length == 0)
+        {
+            selectedPolicyPackRefs = await dbContext.PolicyPacks
+                .Select(x => x.Name + " " + x.Version)
+                .Distinct()
+                .ToArrayAsync(cancellationToken);
+        }
+
         var summary = new AssessmentSummary(
             aiActClass,
             findings.SelectMany(x => x.RuleKeys).Distinct().ToArray(),
@@ -138,7 +152,7 @@ public class AssessmentService(
             nis2Flags.ToArray(),
             componentRisk,
             complianceScore,
-            ["GDPR Core 2026.1", "NIS2 Core 2026.1", "EU AI Act Core 2026.1"],
+            selectedPolicyPackRefs,
             "Deterministic policy evaluation + structured AI draft generation");
 
         var actionPlan = await aiDraftService.GenerateActionPlanAsync(summary, findings, cancellationToken);

@@ -111,10 +111,15 @@ public static class SeedData
             UpdatedAt = DateTimeOffset.UtcNow
         });
 
-        dbContext.PolicyPacks.AddRange(
-            new PolicyPack { Id = Guid.NewGuid(), Name = "GDPR Core", Version = "2026.1", Scope = PolicyScope.Gdpr },
-            new PolicyPack { Id = Guid.NewGuid(), Name = "NIS2 Core", Version = "2026.1", Scope = PolicyScope.Nis2 },
-            new PolicyPack { Id = Guid.NewGuid(), Name = "EU AI Act Core", Version = "2026.1", Scope = PolicyScope.AiAct }
+        var gdprPack = new PolicyPack { Id = Guid.NewGuid(), Name = "GDPR Core", Version = "2026.1", Scope = PolicyScope.Gdpr };
+        var nis2Pack = new PolicyPack { Id = Guid.NewGuid(), Name = "NIS2 Core", Version = "2026.1", Scope = PolicyScope.Nis2 };
+        var aiActPack = new PolicyPack { Id = Guid.NewGuid(), Name = "EU AI Act Core", Version = "2026.1", Scope = PolicyScope.AiAct };
+
+        dbContext.PolicyPacks.AddRange(gdprPack, nis2Pack, aiActPack);
+        dbContext.TenantPolicyPackSelections.AddRange(
+            new TenantPolicyPackSelection { Id = Guid.NewGuid(), TenantId = tenantId, PolicyPackId = gdprPack.Id, IsEnabled = true },
+            new TenantPolicyPackSelection { Id = Guid.NewGuid(), TenantId = tenantId, PolicyPackId = nis2Pack.Id, IsEnabled = true },
+            new TenantPolicyPackSelection { Id = Guid.NewGuid(), TenantId = tenantId, PolicyPackId = aiActPack.Id, IsEnabled = true }
         );
 
         dbContext.Controls.AddRange(

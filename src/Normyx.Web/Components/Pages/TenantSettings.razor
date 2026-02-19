@@ -54,6 +54,20 @@ else
         <h2>Integrations</h2>
         <p>Configure webhook stubs for Jira and Azure DevOps exports.</p>
 
+        <h2>Policy Packs</h2>
+        <p>Enable or disable versioned compliance packs for this tenant.</p>
+        <ul>
+            @foreach (var pack in _policyPacks)
+            {
+                <li>
+                    <label>
+                        <InputCheckbox Value="@pack.Enabled" ValueChanged="async enabled => await SetPolicyPackAsync(pack.Id, enabled)" />
+                        @pack.Name (@pack.Version) - @pack.Scope
+                    </label>
+                </li>
+            }
+        </ul>
+
         <div class="card-shell" style="margin-top:0.8rem;">
             <h3>Jira webhook</h3>
             <EditForm Model="_jira" OnValidSubmit="SaveJiraWebhookAsync">
@@ -95,6 +109,7 @@ else
     private Normyx.Web.Models.TenantDto? _tenant;
     private List<Normyx.Web.Models.UserDto> _users = [];
     private List<Normyx.Web.Models.IntegrationWebhookDto> _integrations = [];
+    private List<Normyx.Web.Models.PolicyPackSelectionDto> _policyPacks = [];
 
     private string _error = string.Empty;
     private string _integrationMessage = string.Empty;
@@ -120,6 +135,7 @@ else
             _tenant = await Api.GetAsync<Normyx.Web.Models.TenantDto>("/tenants/me");
             _users = (await Api.GetAsync<List<Normyx.Web.Models.UserDto>>("/tenants/users")) ?? [];
             _integrations = (await Api.GetAsync<List<Normyx.Web.Models.IntegrationWebhookDto>>("/integrations/webhooks")) ?? [];
+            _policyPacks = (await Api.GetAsync<List<Normyx.Web.Models.PolicyPackSelectionDto>>("/tenants/policy-packs")) ?? [];
 
             HydrateWebhookForm("Jira", _jira);
             HydrateWebhookForm("AzureDevOps", _azureDevOps);
@@ -206,6 +222,20 @@ else
     private Task SaveAzureWebhookAsync() => SaveWebhookAsync("AzureDevOps", _azureDevOps);
     private Task TestJiraWebhookAsync() => TestWebhookAsync("Jira");
     private Task TestAzureWebhookAsync() => TestWebhookAsync("AzureDevOps");
+
+    private async Task SetPolicyPackAsync(Guid policyPackId, bool enabled)
+    {
+        try
+        {
+            _error = string.Empty;
+            await Api.PutAsync($"/tenants/policy-packs/{policyPackId}/enabled", new { enabled });
+            await LoadAsync();
+        }
+        catch (Exception ex)
+        {
+            _error = ex.Message;
+        }
+    }
 
     private sealed class CreateUserForm
     {

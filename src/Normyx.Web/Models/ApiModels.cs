@@ -55,3 +55,4 @@ public record EvidenceGapDto(string TargetType, Guid TargetId, string Title, str
 public record RagSearchResultDto(Guid ChunkId, string SourceType, Guid? DocumentId, string ChunkText, float Score, string[] Tags);
 
 public record IntegrationWebhookDto(Guid Id, string Provider, string WebhookUrl, bool IsEnabled, DateTimeOffset CreatedAt, DateTimeOffset UpdatedAt);
+public record PolicyPackSelectionDto(Guid Id, string Name, string Version, string Scope, bool Enabled);

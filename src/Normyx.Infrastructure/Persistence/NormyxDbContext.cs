@@ -31,6 +31,7 @@ public class NormyxDbContext(DbContextOptions<NormyxDbContext> options) : DbCont
     public DbSet<AuditLog> AuditLogs => Set<AuditLog>();
     public DbSet<ExportArtifact> ExportArtifacts => Set<ExportArtifact>();
     public DbSet<TenantIntegration> TenantIntegrations => Set<TenantIntegration>();
+    public DbSet<TenantPolicyPackSelection> TenantPolicyPackSelections => Set<TenantPolicyPackSelection>();
     public DbSet<RagChunk> RagChunks => Set<RagChunk>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
@@ -55,6 +56,7 @@ public class NormyxDbContext(DbContextOptions<NormyxDbContext> options) : DbCont
 
         modelBuilder.Entity<AuditLog>().HasIndex(x => new { x.TenantId, x.Timestamp });
         modelBuilder.Entity<TenantIntegration>().HasIndex(x => new { x.TenantId, x.Provider }).IsUnique();
+        modelBuilder.Entity<TenantPolicyPackSelection>().HasIndex(x => new { x.TenantId, x.PolicyPackId }).IsUnique();
 
         modelBuilder.Entity<RagChunk>()
             .Property(x => x.Embedding)

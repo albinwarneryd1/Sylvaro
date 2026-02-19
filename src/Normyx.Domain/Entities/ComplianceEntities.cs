@@ -344,6 +344,15 @@ public class TenantIntegration
     public DateTimeOffset UpdatedAt { get; set; } = DateTimeOffset.UtcNow;
 }
 
+public class TenantPolicyPackSelection
+{
+    public Guid Id { get; set; }
+    public Guid TenantId { get; set; }
+    public Guid PolicyPackId { get; set; }
+    public bool IsEnabled { get; set; } = true;
+    public DateTimeOffset UpdatedAt { get; set; } = DateTimeOffset.UtcNow;
+}
+
 public class RagChunk
 {
     public Guid Id { get; set; }

@@ -20,6 +20,8 @@ public static class TenantEndpoints
         group.MapGet("/users", ListUsersAsync).RequireAuthorization(new AuthorizeAttribute { Roles = RoleNames.Admin });
         group.MapPost("/users", CreateUserAsync).RequireAuthorization(new AuthorizeAttribute { Roles = RoleNames.Admin });
         group.MapPut("/users/{userId:guid}/roles", UpdateUserRolesAsync).RequireAuthorization(new AuthorizeAttribute { Roles = RoleNames.Admin });
+        group.MapGet("/policy-packs", ListPolicyPacksAsync).RequireAuthorization(new AuthorizeAttribute { Roles = RoleNames.Admin });
+        group.MapPut("/policy-packs/{policyPackId:guid}/enabled", SetPolicyPackEnabledAsync).RequireAuthorization(new AuthorizeAttribute { Roles = RoleNames.Admin });
 
         return app;
     }
@@ -99,6 +101,66 @@ public static class TenantEndpoints
     }
 
     private record UpdateRolesRequest(string[] Roles);
+
+    private static async Task<IResult> ListPolicyPacksAsync(NormyxDbContext dbContext, ICurrentUserContext currentUser)
+    {
+        var tenantId = TenantContext.RequireTenantId(currentUser);
+
+        var policyPacks = await dbContext.PolicyPacks
+            .OrderBy(x => x.Scope)
+            .ThenBy(x => x.Name)
+            .Select(pack => new
+            {
+                pack.Id,
+                pack.Name,
+                pack.Version,
+                Scope = pack.Scope.ToString(),
+                enabled = dbContext.TenantPolicyPackSelections
+                    .Where(sel => sel.TenantId == tenantId && sel.PolicyPackId == pack.Id)
+                    .Select(sel => (bool?)sel.IsEnabled)
+                    .FirstOrDefault() ?? false
+            })
+            .ToListAsync();
+
+        return Results.Ok(policyPacks);
+    }
+
+    private record SetPolicyPackEnabledRequest(bool Enabled);
+
+    private static async Task<IResult> SetPolicyPackEnabledAsync(
+        [FromRoute] Guid policyPackId,
+        [FromBody] SetPolicyPackEnabledRequest request,
+        NormyxDbContext dbContext,
+        ICurrentUserContext currentUser)
+    {
+        var tenantId = TenantContext.RequireTenantId(currentUser);
+
+        var exists = await dbContext.PolicyPacks.AnyAsync(x => x.Id == policyPackId);
+        if (!exists)
+        {
+            return Results.NotFound();
+        }
+
+        var selection = await dbContext.TenantPolicyPackSelections
+            .FirstOrDefaultAsync(x => x.TenantId == tenantId && x.PolicyPackId == policyPackId);
+
+        if (selection is null)
+        {
+            selection = new TenantPolicyPackSelection
+            {
+                Id = Guid.NewGuid(),
+                TenantId = tenantId,
+                PolicyPackId = policyPackId
+            };
+            dbContext.TenantPolicyPackSelections.Add(selection);
+        }
+
+        selection.IsEnabled = request.Enabled;
+        selection.UpdatedAt = DateTimeOffset.UtcNow;
+
+        await dbContext.SaveChangesAsync();
+        return Results.NoContent();
+    }
 
     private static async Task<IResult> UpdateUserRolesAsync(
         [FromRoute] Guid userId,
