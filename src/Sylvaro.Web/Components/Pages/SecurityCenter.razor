@@ -14,12 +14,13 @@ else if (!Session.IsAuthenticated)
 }
 else
 {
-    <div class="section-head">
+    <div class="security-shell">
+    <div class="section-head security-head">
         <div>
             <h1>Security Center</h1>
             <p>Session governance, access hardening and machine-to-machine token controls.</p>
         </div>
-        <div class="status-line">
+        <div class="status-line security-status-line">
             <span class="risk-pill neutral">MFA Status: Planned</span>
             <span class="risk-pill success">Password Policy: Enforced</span>
             <span class="risk-pill warning">Active Sessions: @_activeSessions.Count</span>
@@ -28,10 +29,10 @@ else
         </div>
     </div>
 
-    <div class="grid-cards">
-        <section class="card-shell">
-            <h2>Session Management</h2>
-            <ul>
+    <div class="grid-cards security-grid">
+        <section class="card-shell security-card">
+            <h2 class="section-subtitle">Session Management</h2>
+            <ul class="compact-list">
                 <li>Last login: @FormatTimestamp(Session.LastAuthenticatedAt)</li>
                 <li>Refresh token expiry: @FormatTimestamp(Session.RefreshTokenExpiresAt)</li>
                 <li>Session policy: 60 min idle timeout (target policy)</li>
@@ -82,10 +83,10 @@ else
             </table>
         </section>
 
-        <section class="card-shell">
-            <h2>Authentication Hardening</h2>
-            <label><InputCheckbox @bind-Value="_mfaPlaceholder" disabled="true" /> Require MFA for privileged roles (MVP placeholder)</label>
-            <ul>
+        <section class="card-shell security-card">
+            <h2 class="section-subtitle">Authentication Hardening</h2>
+            <label class="security-option"><InputCheckbox @bind-Value="_mfaPlaceholder" disabled="true" /> Require MFA for privileged roles (MVP placeholder)</label>
+            <ul class="compact-list">
                 <li>Minimum password length: 12 characters</li>
                 <li>Complexity rule: upper/lower/number/symbol</li>
                 <li>Rotation policy: every 90 days for admin users</li>
@@ -93,16 +94,16 @@ else
             </ul>
         </section>
 
-        <section class="card-shell">
-            <h2>Role & API Protection Overview</h2>
-            <ul>
+        <section class="card-shell security-card">
+            <h2 class="section-subtitle">Role & API Protection Overview</h2>
+            <ul class="compact-list">
                 @foreach (var role in _roles)
                 {
                     <li>@role.Name</li>
                 }
             </ul>
-            <h3>Rate Limiting Policy</h3>
-            <ul>
+            <h3 class="section-subtitle secondary">Rate Limiting Policy</h3>
+            <ul class="compact-list">
                 <li>Global API quota: @(_rateLimitPolicy?.GlobalPermitLimitPerMinute ?? 200) requests / minute per client IP</li>
                 <li>Authentication endpoints: @(_rateLimitPolicy?.AuthPermitLimitPerMinute ?? 20) requests / minute per client IP</li>
                 <li>Evaluation window: @(_rateLimitPolicy?.WindowSeconds ?? 60) seconds</li>
@@ -110,8 +111,8 @@ else
             </ul>
         </section>
 
-        <section class="card-shell metric-card wide">
-            <h2>API Tokens Management</h2>
+        <section class="card-shell metric-card wide security-card">
+            <h2 class="section-subtitle">API Tokens Management</h2>
             <p>Issue scoped integration tokens for automation pipelines. Tokens are masked after creation.</p>
             <div class="field-grid">
                 <InputText @bind-Value="_tokenName" class="text-input" placeholder="Token name" />
@@ -167,6 +168,7 @@ else
             </table>
         </section>
     </div>
+</div>
 }
 
 @code {

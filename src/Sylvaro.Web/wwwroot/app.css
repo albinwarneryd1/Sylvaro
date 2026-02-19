@@ -339,28 +339,34 @@ input.text-input {
 .table-shell td {
     border-bottom: 1px solid var(--border-subtle);
     text-align: left;
-    padding: 0.4rem 0.38rem;
+    padding: 0.34rem 0.38rem;
     vertical-align: top;
-    font-size: 0.76rem;
+    font-size: 0.74rem;
 }
 
 .table-shell th {
     position: sticky;
     top: 0;
     z-index: 2;
-    background: var(--surface-muted);
-    color: var(--text-muted);
-    font-size: 0.68rem;
-    letter-spacing: 0.08em;
+    background: #e2d8ca;
+    color: #3a3026;
+    font-size: 0.67rem;
+    letter-spacing: 0.1em;
     text-transform: uppercase;
+    border-bottom: 1px solid var(--border-strong);
+}
+
+.table-shell th + th,
+.table-shell td + td {
+    border-left: 1px solid #d8cebf;
 }
 
 .table-shell tbody tr:nth-child(even) {
-    background: var(--surface-table-alt);
+    background: #f5f1ea;
 }
 
 .table-shell tbody tr:hover {
-    background: #f2ede6;
+    background: #eee6da;
 }
 
 .timeline-list {
@@ -894,18 +900,18 @@ input.text-input {
 
 .matrix-table th,
 .matrix-table td {
-    border: 1px solid var(--border-subtle);
-    padding: 0.36rem;
-    font-size: 0.73rem;
+    border: 1px solid #d8cebf;
+    padding: 0.3rem 0.34rem;
+    font-size: 0.72rem;
     vertical-align: top;
 }
 
 .matrix-table th {
-    background: var(--surface-muted);
-    color: var(--text-muted);
+    background: #e2d8ca;
+    color: #3a3026;
     text-transform: uppercase;
-    letter-spacing: 0.08em;
-    font-size: 0.67rem;
+    letter-spacing: 0.1em;
+    font-size: 0.65rem;
 }
 
 .matrix-cell {
@@ -1059,4 +1065,63 @@ input.text-input {
 .operational-guide li {
     font-size: 0.78rem;
     color: var(--text-body);
+}
+
+.security-shell {
+    display: grid;
+    gap: var(--space-2);
+}
+
+.security-head {
+    margin-bottom: 0.15rem;
+}
+
+.security-status-line {
+    gap: 0.22rem;
+}
+
+.security-grid {
+    gap: 0.55rem;
+}
+
+.security-card {
+    padding: 0.68rem 0.72rem;
+}
+
+.section-subtitle {
+    margin: 0 0 0.38rem;
+    font-size: 0.9rem;
+    font-weight: 600;
+    letter-spacing: 0.01em;
+    color: var(--text-strong);
+}
+
+.section-subtitle.secondary {
+    margin-top: 0.4rem;
+    font-size: 0.78rem;
+    text-transform: uppercase;
+    letter-spacing: 0.09em;
+    color: var(--text-muted);
+}
+
+.compact-list {
+    margin: 0;
+    padding-left: 1rem;
+    display: grid;
+    gap: 0.16rem;
+}
+
+.compact-list li {
+    margin: 0;
+    font-size: 0.74rem;
+    line-height: 1.35;
+}
+
+.security-option {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.4rem;
+    font-size: 0.74rem;
+    color: var(--text-body);
+    margin-bottom: 0.4rem;
 }
