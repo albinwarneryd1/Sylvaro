@@ -10,7 +10,7 @@ Normyx AI is a compliance operations platform for AI systems with deterministic 
 - `policy-packs/` versioned compliance-as-code JSON packs.
 - `prompts/` versioned prompt templates for structured JSON generation.
 - `reference-notes/` built-in compliance reference notes used in RAG.
-- `tests/Normyx.Tests` integration test for multi-tenant isolation using Testcontainers.
+- `tests/Normyx.Tests` integration tests for multi-tenant isolation, tenant RBAC role listing, and action review workflow using Testcontainers.
 
 ## One command start
 
@@ -35,10 +35,10 @@ After startup:
 
 1. Login in the web app with seeded credentials.
 2. Open `AI Systems` and enter `LoanAssist`.
-3. Add/update architecture components and questionnaire answers.
+3. Add/update architecture components, data flows, data stores, and questionnaire answers.
 4. Click `Run Assessment`.
 5. Review generated findings/actions.
-6. Approve actions through API or UI flow.
+6. Review actions as `Approved` / `NeedsEdits` / `Rejected` through API or UI flow.
 7. Configure Jira/Azure webhook stubs in `Tenant Settings` (optional).
 8. Generate `DPIA_Draft` export as PDF or JSON (optionally send webhook).
 9. Open `Audit Log` and `Evidence Gaps` to verify traceability.
@@ -66,16 +66,16 @@ dotnet run --project src/Normyx.Web/Normyx.Web.csproj
 ## Key endpoints
 
 - Auth: `/auth/login`, `/auth/register`, `/auth/refresh`, `/auth/logout`
-- Tenant/users: `/tenants/me`, `/tenants/users`
+- Tenant/users: `/tenants/me`, `/tenants/roles`, `/tenants/users`
 - AI systems/versions: `/aisystems`, `/aisystems/{id}/versions`
-- Architecture: `/versions/{versionId}/architecture`
+- Architecture: `/versions/{versionId}/architecture`, `/versions/{versionId}/architecture/components`, `/versions/{versionId}/architecture/flows`, `/versions/{versionId}/architecture/stores`
 - Inventory: `/versions/{versionId}/inventory`
 - Evidence: `/documents/upload`, `/documents/{id}/download`
 - Evidence map/gaps/search: `/versions/{versionId}/evidence/map`, `/versions/{versionId}/evidence/gaps`, `/versions/{versionId}/evidence/search`
 - Assessments: `/versions/{versionId}/assessments/run`
 - Assessment diff: `/versions/{versionId}/assessments/diff/{otherVersionId}`
 - Findings: `/findings/assessment/{assessmentId}`
-- Actions: `/actions/version/{versionId}`, `/actions/{actionId}/approve`
+- Actions: `/actions/version/{versionId}`, `/actions/board/{versionId}`, `/actions/{actionId}/approve`, `/actions/{actionId}/reviews`
 - Exports: `/exports/versions/{versionId}/generate`, `/exports/versions/{versionId}`, `/exports/{artifactId}/download`
 - Integrations: `/integrations/webhooks`, `/integrations/webhooks/{provider}`
 - Tenant policy packs: `/tenants/policy-packs`, `/tenants/policy-packs/{policyPackId}/enabled`
