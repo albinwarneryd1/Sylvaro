@@ -59,6 +59,10 @@
             Session.SetSession(_model.TenantName, _model.Email, response.AccessToken, response.RefreshToken, response.RefreshTokenExpiresAt);
             Nav.NavigateTo("/");
         }
+        catch (NavigationException)
+        {
+            throw;
+        }
         catch (Exception ex)
         {
             _error = ex.Message;
