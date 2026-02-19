@@ -22,11 +22,18 @@ public static class ArchitectureEndpoints
         group.MapPut("/flows/{flowId:guid}", UpdateFlowAsync);
         group.MapDelete("/flows/{flowId:guid}", DeleteFlowAsync);
 
+        group.MapPost("/stores", AddStoreAsync);
+        group.MapPut("/stores/{storeId:guid}", UpdateStoreAsync);
+        group.MapDelete("/stores/{storeId:guid}", DeleteStoreAsync);
+
         return app;
     }
 
     private static async Task<bool> VersionBelongsToTenantAsync(NormyxDbContext dbContext, Guid versionId, Guid tenantId)
         => await dbContext.AiSystemVersions.AnyAsync(v => v.Id == versionId && v.AiSystem.TenantId == tenantId);
+
+    private static async Task<bool> ComponentBelongsToVersionAsync(NormyxDbContext dbContext, Guid versionId, Guid componentId)
+        => await dbContext.Components.AnyAsync(c => c.Id == componentId && c.AiSystemVersionId == versionId);
 
     private static async Task<IResult> GetArchitectureAsync([FromRoute] Guid versionId, NormyxDbContext dbContext, ICurrentUserContext currentUser)
     {
@@ -124,6 +131,12 @@ public static class ArchitectureEndpoints
             return Results.NotFound();
         }
 
+        if (!await ComponentBelongsToVersionAsync(dbContext, versionId, request.FromComponentId) ||
+            !await ComponentBelongsToVersionAsync(dbContext, versionId, request.ToComponentId))
+        {
+            return Results.BadRequest(new { message = "Flow endpoints must reference existing components in the version." });
+        }
+
         var flow = new DataFlow
         {
             Id = Guid.NewGuid(),
@@ -147,6 +160,12 @@ public static class ArchitectureEndpoints
         if (!await VersionBelongsToTenantAsync(dbContext, versionId, tenantId))
         {
             return Results.NotFound();
+        }
+
+        if (!await ComponentBelongsToVersionAsync(dbContext, versionId, request.FromComponentId) ||
+            !await ComponentBelongsToVersionAsync(dbContext, versionId, request.ToComponentId))
+        {
+            return Results.BadRequest(new { message = "Flow endpoints must reference existing components in the version." });
         }
 
         var flow = await dbContext.DataFlows.FirstOrDefaultAsync(x => x.Id == flowId && x.AiSystemVersionId == versionId);
@@ -181,6 +200,87 @@ public static class ArchitectureEndpoints
         }
 
         dbContext.DataFlows.Remove(flow);
+        await dbContext.SaveChangesAsync();
+        return Results.NoContent();
+    }
+
+    private record UpsertStoreRequest(Guid ComponentId, string StorageType, string Region, int RetentionDays, bool EncryptionAtRest, string AccessModel);
+
+    private static async Task<IResult> AddStoreAsync([FromRoute] Guid versionId, [FromBody] UpsertStoreRequest request, NormyxDbContext dbContext, ICurrentUserContext currentUser)
+    {
+        var tenantId = TenantContext.RequireTenantId(currentUser);
+        if (!await VersionBelongsToTenantAsync(dbContext, versionId, tenantId))
+        {
+            return Results.NotFound();
+        }
+
+        if (!await ComponentBelongsToVersionAsync(dbContext, versionId, request.ComponentId))
+        {
+            return Results.BadRequest(new { message = "Data store must reference a component in the version." });
+        }
+
+        var store = new DataStore
+        {
+            Id = Guid.NewGuid(),
+            AiSystemVersionId = versionId,
+            ComponentId = request.ComponentId,
+            StorageType = request.StorageType,
+            Region = request.Region,
+            RetentionDays = request.RetentionDays,
+            EncryptionAtRest = request.EncryptionAtRest,
+            AccessModel = request.AccessModel
+        };
+
+        dbContext.DataStores.Add(store);
+        await dbContext.SaveChangesAsync();
+        return Results.Created($"/versions/{versionId}/architecture/stores/{store.Id}", store);
+    }
+
+    private static async Task<IResult> UpdateStoreAsync([FromRoute] Guid versionId, [FromRoute] Guid storeId, [FromBody] UpsertStoreRequest request, NormyxDbContext dbContext, ICurrentUserContext currentUser)
+    {
+        var tenantId = TenantContext.RequireTenantId(currentUser);
+        if (!await VersionBelongsToTenantAsync(dbContext, versionId, tenantId))
+        {
+            return Results.NotFound();
+        }
+
+        if (!await ComponentBelongsToVersionAsync(dbContext, versionId, request.ComponentId))
+        {
+            return Results.BadRequest(new { message = "Data store must reference a component in the version." });
+        }
+
+        var store = await dbContext.DataStores.FirstOrDefaultAsync(x => x.Id == storeId && x.AiSystemVersionId == versionId);
+        if (store is null)
+        {
+            return Results.NotFound();
+        }
+
+        store.ComponentId = request.ComponentId;
+        store.StorageType = request.StorageType;
+        store.Region = request.Region;
+        store.RetentionDays = request.RetentionDays;
+        store.EncryptionAtRest = request.EncryptionAtRest;
+        store.AccessModel = request.AccessModel;
+
+        await dbContext.SaveChangesAsync();
+        return Results.NoContent();
+    }
+
+    private static async Task<IResult> DeleteStoreAsync([FromRoute] Guid versionId, [FromRoute] Guid storeId, NormyxDbContext dbContext, ICurrentUserContext currentUser)
+    {
+        var tenantId = TenantContext.RequireTenantId(currentUser);
+        if (!await VersionBelongsToTenantAsync(dbContext, versionId, tenantId))
+        {
+            return Results.NotFound();
+        }
+
+        var store = await dbContext.DataStores.FirstOrDefaultAsync(x => x.Id == storeId && x.AiSystemVersionId == versionId);
+        if (store is null)
+        {
+            return Results.NotFound();
+        }
+
+        dbContext.DataStores.Remove(store);
         await dbContext.SaveChangesAsync();
         return Results.NoContent();
     }

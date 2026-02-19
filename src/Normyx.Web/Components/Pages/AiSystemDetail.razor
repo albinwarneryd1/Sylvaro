@@ -116,6 +116,65 @@ else
                 <button class="btn-small" type="submit">Add component</button>
             </EditForm>
 
+            <h2>Data Flows (@_architecture.Flows.Count)</h2>
+            <ul>
+                @foreach (var flow in _architecture.Flows)
+                {
+                    <li>@ResolveComponentName(flow.FromComponentId) -> @ResolveComponentName(flow.ToComponentId) (@string.Join(", ", flow.DataCategories))</li>
+                }
+            </ul>
+
+            <h3>Add flow</h3>
+            <EditForm Model="_newFlow" OnValidSubmit="AddFlowAsync">
+                <div class="field-grid">
+                    <InputSelect @bind-Value="_newFlow.FromComponentId" class="text-input">
+                        <option value="@Guid.Empty">From component</option>
+                        @foreach (var component in _architecture.Components)
+                        {
+                            <option value="@component.Id">@component.Name</option>
+                        }
+                    </InputSelect>
+                    <InputSelect @bind-Value="_newFlow.ToComponentId" class="text-input">
+                        <option value="@Guid.Empty">To component</option>
+                        @foreach (var component in _architecture.Components)
+                        {
+                            <option value="@component.Id">@component.Name</option>
+                        }
+                    </InputSelect>
+                    <InputText @bind-Value="_newFlow.DataCategoriesCsv" class="text-input" placeholder="personal_data,financial_data" />
+                    <InputText @bind-Value="_newFlow.Purpose" class="text-input" placeholder="Purpose" />
+                </div>
+                <label><InputCheckbox @bind-Value="_newFlow.EncryptionInTransit" /> Encryption in transit</label>
+                <button class="btn-small" type="submit">Add flow</button>
+            </EditForm>
+
+            <h2>Data Stores (@_architecture.Stores.Count)</h2>
+            <ul>
+                @foreach (var store in _architecture.Stores)
+                {
+                    <li>@ResolveComponentName(store.ComponentId) - @store.StorageType (@store.Region), retention @store.RetentionDays days</li>
+                }
+            </ul>
+
+            <h3>Add data store</h3>
+            <EditForm Model="_newStore" OnValidSubmit="AddStoreAsync">
+                <div class="field-grid">
+                    <InputSelect @bind-Value="_newStore.ComponentId" class="text-input">
+                        <option value="@Guid.Empty">Component</option>
+                        @foreach (var component in _architecture.Components)
+                        {
+                            <option value="@component.Id">@component.Name</option>
+                        }
+                    </InputSelect>
+                    <InputText @bind-Value="_newStore.StorageType" class="text-input" placeholder="Storage type" />
+                    <InputText @bind-Value="_newStore.Region" class="text-input" placeholder="Region" />
+                    <InputNumber @bind-Value="_newStore.RetentionDays" class="text-input" />
+                    <InputText @bind-Value="_newStore.AccessModel" class="text-input" placeholder="Access model" />
+                </div>
+                <label><InputCheckbox @bind-Value="_newStore.EncryptionAtRest" /> Encryption at rest</label>
+                <button class="btn-small" type="submit">Add data store</button>
+            </EditForm>
+
             <h2>Data & Vendors</h2>
             <p>Data items: @_inventory.DataItems.Count | Vendors: @_inventory.Vendors.Count</p>
 
@@ -281,6 +340,8 @@ else
 
     private readonly QuestionnaireForm _questionnaire = new();
     private readonly NewComponentForm _newComponent = new();
+    private readonly NewFlowForm _newFlow = new();
+    private readonly NewStoreForm _newStore = new();
     private readonly ExportForm _exportForm = new();
     private string _evidenceQuery = "DPIA lawful basis transfer";
 
@@ -483,6 +544,65 @@ else
         }
     }
 
+    private async Task AddFlowAsync()
+    {
+        if (_currentVersionId is null || _newFlow.FromComponentId == Guid.Empty || _newFlow.ToComponentId == Guid.Empty)
+        {
+            return;
+        }
+
+        try
+        {
+            var categories = _newFlow.DataCategoriesCsv
+                .Split(',', StringSplitOptions.TrimEntries | StringSplitOptions.RemoveEmptyEntries);
+
+            await Api.PostAsync($"/versions/{_currentVersionId}/architecture/flows", new
+            {
+                fromComponentId = _newFlow.FromComponentId,
+                toComponentId = _newFlow.ToComponentId,
+                dataCategories = categories,
+                purpose = _newFlow.Purpose,
+                encryptionInTransit = _newFlow.EncryptionInTransit,
+                notes = _newFlow.Notes
+            });
+
+            _newFlow.Reset();
+            await LoadVersionDataAsync(_currentVersionId.Value);
+        }
+        catch (Exception ex)
+        {
+            _error = ex.Message;
+        }
+    }
+
+    private async Task AddStoreAsync()
+    {
+        if (_currentVersionId is null || _newStore.ComponentId == Guid.Empty)
+        {
+            return;
+        }
+
+        try
+        {
+            await Api.PostAsync($"/versions/{_currentVersionId}/architecture/stores", new
+            {
+                componentId = _newStore.ComponentId,
+                storageType = _newStore.StorageType,
+                region = _newStore.Region,
+                retentionDays = _newStore.RetentionDays,
+                encryptionAtRest = _newStore.EncryptionAtRest,
+                accessModel = _newStore.AccessModel
+            });
+
+            _newStore.Reset();
+            await LoadVersionDataAsync(_currentVersionId.Value);
+        }
+        catch (Exception ex)
+        {
+            _error = ex.Message;
+        }
+    }
+
     private async Task UpdateActionStatusAsync(Guid actionId, int status)
     {
         try
@@ -571,6 +691,9 @@ else
         }
     }
 
+    private string ResolveComponentName(Guid componentId)
+        => _architecture.Components.FirstOrDefault(c => c.Id == componentId)?.Name ?? componentId.ToString()[..8];
+
     private sealed class QuestionnaireForm
     {
         public string AutomatedDecisionMaking { get; set; } = "true";
@@ -601,6 +724,46 @@ else
             TrustZone = "Internal";
             IsExternal = false;
             DataSensitivityLevel = "Medium";
+        }
+    }
+
+    private sealed class NewFlowForm
+    {
+        public Guid FromComponentId { get; set; } = Guid.Empty;
+        public Guid ToComponentId { get; set; } = Guid.Empty;
+        public string DataCategoriesCsv { get; set; } = "personal_data";
+        public string Purpose { get; set; } = "Model inference";
+        public bool EncryptionInTransit { get; set; } = true;
+        public string Notes { get; set; } = string.Empty;
+
+        public void Reset()
+        {
+            FromComponentId = Guid.Empty;
+            ToComponentId = Guid.Empty;
+            DataCategoriesCsv = "personal_data";
+            Purpose = "Model inference";
+            EncryptionInTransit = true;
+            Notes = string.Empty;
+        }
+    }
+
+    private sealed class NewStoreForm
+    {
+        public Guid ComponentId { get; set; } = Guid.Empty;
+        public string StorageType { get; set; } = "PostgreSQL";
+        public string Region { get; set; } = "eu-north-1";
+        public int RetentionDays { get; set; } = 365;
+        public bool EncryptionAtRest { get; set; } = true;
+        public string AccessModel { get; set; } = "RBAC";
+
+        public void Reset()
+        {
+            ComponentId = Guid.Empty;
+            StorageType = "PostgreSQL";
+            Region = "eu-north-1";
+            RetentionDays = 365;
+            EncryptionAtRest = true;
+            AccessModel = "RBAC";
         }
     }
 }
