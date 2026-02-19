@@ -13,6 +13,7 @@ namespace Normyx.Tests;
 
 public class TenantIsolationTests : IAsyncLifetime
 {
+    private readonly string _testDatabaseName = $"normyx_test_{Guid.NewGuid():N}";
     private PostgreSqlContainer? _postgres;
     private WebApplicationFactory<Program> _factory = null!;
     private bool _dockerAvailable = true;
@@ -23,7 +24,7 @@ public class TenantIsolationTests : IAsyncLifetime
         {
             _postgres = new PostgreSqlBuilder()
                 .WithImage("postgres:16-alpine")
-                .WithDatabase("normyx_test")
+                .WithDatabase(_testDatabaseName)
                 .WithUsername("postgres")
                 .WithPassword("postgres")
                 .Build();
@@ -64,10 +65,11 @@ public class TenantIsolationTests : IAsyncLifetime
 
         var tenantAToken = await LoginAsync(client, "NordicFin AB", "admin@nordicfin.example", "ChangeMe123!");
 
+        var suffix = Guid.NewGuid().ToString("N")[..8];
         var tenantBRegistration = await client.PostAsJsonAsync("/auth/register", new
         {
-            tenantName = "OtherTenant AB",
-            email = "admin@othertenant.example",
+            tenantName = $"OtherTenant-{suffix} AB",
+            email = $"admin+{suffix}@othertenant.example",
             displayName = "Other Admin",
             password = "ChangeMe123!"
         });
@@ -144,7 +146,7 @@ public class TenantIsolationTests : IAsyncLifetime
         var systemListResponse = await SendAuthorizedAsync(client, token, HttpMethod.Get, "/aisystems");
         systemListResponse.EnsureSuccessStatusCode();
         var systemListPayload = await systemListResponse.Content.ReadAsStringAsync();
-        var systemId = ReadFirstGuid(systemListPayload, "id");
+        var systemId = ReadGuidByName(systemListPayload, "LoanAssist");
 
         var versionListResponse = await SendAuthorizedAsync(client, token, HttpMethod.Get, $"/aisystems/{systemId}/versions");
         versionListResponse.EnsureSuccessStatusCode();
@@ -224,6 +226,38 @@ public class TenantIsolationTests : IAsyncLifetime
         return idProp.GetGuid();
     }
 
+    private static Guid ReadGuidByName(string json, string systemName)
+    {
+        using var doc = JsonDocument.Parse(json);
+        var root = doc.RootElement;
+
+        if (root.ValueKind != JsonValueKind.Array)
+        {
+            throw new InvalidOperationException("Expected an array of systems.");
+        }
+
+        foreach (var item in root.EnumerateArray())
+        {
+            if (!item.TryGetProperty("name", out var nameProperty))
+            {
+                continue;
+            }
+
+            var name = nameProperty.GetString();
+            if (!string.Equals(name, systemName, StringComparison.OrdinalIgnoreCase))
+            {
+                continue;
+            }
+
+            if (item.TryGetProperty("id", out var idProperty))
+            {
+                return idProperty.GetGuid();
+            }
+        }
+
+        throw new InvalidOperationException($"System '{systemName}' was not found.");
+    }
+
     private static Guid ReadFirstActionIdFromBoard(string json)
     {
         using var doc = JsonDocument.Parse(json);
@@ -257,8 +291,7 @@ public class TenantIsolationTests : IAsyncLifetime
                 config.AddInMemoryCollection(new Dictionary<string, string?>
                 {
                     ["UseHttpsRedirection"] = "false",
-                    ["ConnectionStrings:DefaultConnection"] = connectionString,
-                    ["Jwt:SigningKey"] = "test-signing-key-with-minimum-length-1234567890"
+                    ["ConnectionStrings:DefaultConnection"] = connectionString
                 });
             });
         }
