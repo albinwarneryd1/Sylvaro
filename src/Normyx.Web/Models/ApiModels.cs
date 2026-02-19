@@ -10,6 +10,7 @@ public record DashboardTenantDto(
     [property: JsonPropertyName("riskDistribution")] Dictionary<string, int> RiskDistribution);
 
 public record TenantDto(Guid Id, string Name, DateTimeOffset CreatedAt);
+public record RoleDto(Guid Id, string Name);
 
 public record UserDto(Guid Id, string Email, string DisplayName, DateTimeOffset CreatedAt, DateTimeOffset? DisabledAt, IEnumerable<string> Roles);
 

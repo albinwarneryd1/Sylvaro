@@ -17,6 +17,8 @@ public static class TenantEndpoints
         var group = app.MapGroup("/tenants").WithTags("Tenants").RequireAuthorization();
 
         group.MapGet("/me", GetCurrentTenantAsync);
+        group.MapPut("/me", UpdateCurrentTenantAsync).RequireAuthorization(new AuthorizeAttribute { Roles = RoleNames.Admin });
+        group.MapGet("/roles", ListRolesAsync);
         group.MapGet("/users", ListUsersAsync).RequireAuthorization(new AuthorizeAttribute { Roles = RoleNames.Admin });
         group.MapPost("/users", CreateUserAsync).RequireAuthorization(new AuthorizeAttribute { Roles = RoleNames.Admin });
         group.MapPut("/users/{userId:guid}/roles", UpdateUserRolesAsync).RequireAuthorization(new AuthorizeAttribute { Roles = RoleNames.Admin });
@@ -36,6 +38,39 @@ public static class TenantEndpoints
             .FirstOrDefaultAsync();
 
         return tenant is null ? Results.NotFound() : Results.Ok(tenant);
+    }
+
+    private record UpdateTenantRequest(string Name);
+
+    private static async Task<IResult> UpdateCurrentTenantAsync([FromBody] UpdateTenantRequest request, NormyxDbContext dbContext, ICurrentUserContext currentUser)
+    {
+        var tenantId = TenantContext.RequireTenantId(currentUser);
+        var normalizedName = request.Name?.Trim() ?? string.Empty;
+
+        if (normalizedName.Length < 2)
+        {
+            return Results.BadRequest(new { message = "Tenant name must be at least 2 characters." });
+        }
+
+        var tenant = await dbContext.Tenants.FirstOrDefaultAsync(x => x.Id == tenantId);
+        if (tenant is null)
+        {
+            return Results.NotFound();
+        }
+
+        tenant.Name = normalizedName;
+        await dbContext.SaveChangesAsync();
+        return Results.NoContent();
+    }
+
+    private static async Task<IResult> ListRolesAsync(NormyxDbContext dbContext)
+    {
+        var roles = await dbContext.Roles
+            .OrderBy(x => x.Name)
+            .Select(x => new { x.Id, x.Name })
+            .ToListAsync();
+
+        return Results.Ok(roles);
     }
 
     private static async Task<IResult> ListUsersAsync(NormyxDbContext dbContext, ICurrentUserContext currentUser)

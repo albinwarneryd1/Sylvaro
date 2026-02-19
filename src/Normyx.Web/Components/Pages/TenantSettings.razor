@@ -23,6 +23,12 @@ else
         @if (_tenant is not null)
         {
             <p><strong>@_tenant.Name</strong> (created @_tenant.CreatedAt.ToString("u"))</p>
+            <EditForm OnValidSubmit="SaveTenantAsync">
+                <div class="field-grid">
+                    <InputText @bind-Value="_tenantName" class="text-input" placeholder="Tenant name" />
+                </div>
+                <button class="btn-small" type="submit">Update tenant name</button>
+            </EditForm>
         }
 
         <h2>Users</h2>
@@ -46,8 +52,15 @@ else
                 <InputText @bind-Value="_newUser.Email" class="text-input" placeholder="Email" />
                 <InputText @bind-Value="_newUser.DisplayName" class="text-input" placeholder="Display name" />
                 <InputText @bind-Value="_newUser.Password" class="text-input" type="password" placeholder="Password" />
-                <InputText @bind-Value="_newUser.RolesCsv" class="text-input" placeholder="Roles: ProductOwner,SecurityLead" />
             </div>
+            <p>Roles</p>
+            @foreach (var role in _roles)
+            {
+                <label style="display:block;">
+                    <InputCheckbox Value="@_selectedNewUserRoles.Contains(role.Name)" ValueChanged="value => ToggleNewUserRole(role.Name, value)" />
+                    @role.Name
+                </label>
+            }
             <button class="btn-main" type="submit">Create user</button>
         </EditForm>
 
@@ -107,7 +120,9 @@ else
 
 @code {
     private Normyx.Web.Models.TenantDto? _tenant;
+    private string _tenantName = string.Empty;
     private List<Normyx.Web.Models.UserDto> _users = [];
+    private List<Normyx.Web.Models.RoleDto> _roles = [];
     private List<Normyx.Web.Models.IntegrationWebhookDto> _integrations = [];
     private List<Normyx.Web.Models.PolicyPackSelectionDto> _policyPacks = [];
 
@@ -117,6 +132,7 @@ else
     private readonly CreateUserForm _newUser = new();
     private readonly WebhookForm _jira = new();
     private readonly WebhookForm _azureDevOps = new();
+    private readonly HashSet<string> _selectedNewUserRoles = ["ProductOwner"];
 
     protected override async Task OnInitializedAsync()
     {
@@ -133,7 +149,9 @@ else
         try
         {
             _tenant = await Api.GetAsync<Normyx.Web.Models.TenantDto>("/tenants/me");
+            _tenantName = _tenant?.Name ?? string.Empty;
             _users = (await Api.GetAsync<List<Normyx.Web.Models.UserDto>>("/tenants/users")) ?? [];
+            _roles = (await Api.GetAsync<List<Normyx.Web.Models.RoleDto>>("/tenants/roles")) ?? [];
             _integrations = (await Api.GetAsync<List<Normyx.Web.Models.IntegrationWebhookDto>>("/integrations/webhooks")) ?? [];
             _policyPacks = (await Api.GetAsync<List<Normyx.Web.Models.PolicyPackSelectionDto>>("/tenants/policy-packs")) ?? [];
 
@@ -164,7 +182,9 @@ else
         try
         {
             _error = string.Empty;
-            var roles = _newUser.RolesCsv.Split(',', StringSplitOptions.TrimEntries | StringSplitOptions.RemoveEmptyEntries);
+            var roles = _selectedNewUserRoles.Count == 0
+                ? ["ProductOwner"]
+                : _selectedNewUserRoles.ToArray();
             await Api.PostAsync("/tenants/users", new
             {
                 email = _newUser.Email,
@@ -175,6 +195,8 @@ else
 
             await LoadAsync();
             _newUser.Reset();
+            _selectedNewUserRoles.Clear();
+            _selectedNewUserRoles.Add("ProductOwner");
         }
         catch (Exception ex)
         {
@@ -237,19 +259,45 @@ else
         }
     }
 
+    private async Task SaveTenantAsync()
+    {
+        try
+        {
+            _error = string.Empty;
+            await Api.PutAsync("/tenants/me", new { name = _tenantName });
+            await LoadAsync();
+        }
+        catch (Exception ex)
+        {
+            _error = ex.Message;
+        }
+    }
+
+    private Task ToggleNewUserRole(string roleName, bool enabled)
+    {
+        if (enabled)
+        {
+            _selectedNewUserRoles.Add(roleName);
+        }
+        else
+        {
+            _selectedNewUserRoles.Remove(roleName);
+        }
+
+        return Task.CompletedTask;
+    }
+
     private sealed class CreateUserForm
     {
         public string Email { get; set; } = string.Empty;
         public string DisplayName { get; set; } = string.Empty;
         public string Password { get; set; } = string.Empty;
-        public string RolesCsv { get; set; } = "ProductOwner";
 
         public void Reset()
         {
             Email = string.Empty;
             DisplayName = string.Empty;
             Password = string.Empty;
-            RolesCsv = "ProductOwner";
         }
     }
 
