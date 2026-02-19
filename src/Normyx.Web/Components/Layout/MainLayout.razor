@@ -1,5 +1,7 @@
 @inherits LayoutComponentBase
 @inject Normyx.Web.Services.AuthSession Session
+@inject IJSRuntime JsRuntime
+@inject NavigationManager Nav
 @implements IDisposable
 
 <div class="app-shell">
@@ -39,9 +41,28 @@
 </div>
 
 @code {
+    private bool _didInitialSessionRestore;
+
     protected override void OnInitialized()
     {
         Session.Changed += OnSessionChanged;
+    }
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (!firstRender || _didInitialSessionRestore)
+        {
+            return;
+        }
+
+        _didInitialSessionRestore = true;
+        var wasAuthenticated = Session.IsAuthenticated;
+        await Session.EnsureInitializedAsync(JsRuntime);
+
+        if (!wasAuthenticated && Session.IsAuthenticated)
+        {
+            Nav.NavigateTo(Nav.Uri, replace: true);
+        }
     }
 
     private void OnSessionChanged() => InvokeAsync(StateHasChanged);

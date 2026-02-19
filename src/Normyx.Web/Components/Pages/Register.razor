@@ -2,6 +2,7 @@
 @inject Normyx.Web.Services.NormyxApiClient Api
 @inject Normyx.Web.Services.AuthSession Session
 @inject NavigationManager Nav
+@inject IJSRuntime JsRuntime
 
 <PageTitle>Register - Normyx AI</PageTitle>
 
@@ -62,6 +63,7 @@
             }
 
             Session.SetSession(_model.TenantName, _model.Email, response.AccessToken, response.RefreshToken, response.RefreshTokenExpiresAt);
+            await Session.PersistAsync(JsRuntime);
             Nav.NavigateTo("/");
         }
         catch (NavigationException)
