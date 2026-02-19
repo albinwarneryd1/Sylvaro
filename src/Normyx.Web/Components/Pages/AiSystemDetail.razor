@@ -104,17 +104,80 @@ else
 
         @if (_currentVersionId is not null && IsTab("Architecture"))
         {
-            <h2>Architecture Graph Workspace</h2>
-            <p class="muted">Trust-zone aware component model with flow registry.</p>
-            <h3>Components (@_architecture.Components.Count)</h3>
-            <ul>
-                @foreach (var component in _architecture.Components)
+            <h2>Architecture Control Surface</h2>
+            <p class="muted">Visual trust boundaries, data flow paths and risk overlays per component.</p>
+
+            <div class="field-grid">
+                <label><InputCheckbox @bind-Value="_showPersonalDataOnly" /> Show personal-data flows only</label>
+                <label><InputCheckbox @bind-Value="_showHighRiskFlowsOnly" /> Show high-risk flows only</label>
+            </div>
+
+            <div class="zone-grid">
+                @foreach (var zone in GetTrustZoneGroups())
                 {
-                    <li>@component.Name (@component.Type) | Zone: @component.TrustZone | Sensitivity: @component.DataSensitivityLevel</li>
+                    <section class="zone-card">
+                        <header>
+                            <strong>@zone.Key</strong>
+                            <span class="muted">@zone.Count() components</span>
+                        </header>
+                        @foreach (var component in zone.OrderBy(x => x.Name))
+                        {
+                            <button type="button"
+                                    class="@($"component-node {GetComponentRiskClass(component)} {(IsSelectedComponent(component.Id) ? "active" : string.Empty)}")"
+                                    title="@GetComponentRiskTooltip(component)"
+                                    @onclick="() => SelectComponent(component.Id)">
+                                <strong>@component.Name</strong>
+                                <span>@component.Type | @component.DataSensitivityLevel</span>
+                            </button>
+                        }
+                    </section>
                 }
-            </ul>
+            </div>
+
+            @if (GetSelectedComponent() is { } selectedComponent)
+            {
+                <div class="card-shell" style="margin-top:0.75rem;">
+                    <h3>Component Risk Justification</h3>
+                    <p>
+                        @selectedComponent.Name in @selectedComponent.TrustZone triggers
+                        <strong>@GetComponentRiskLabel(selectedComponent)</strong> monitoring priority.
+                    </p>
+                    <ul>
+                        @foreach (var control in GetSuggestedControls(selectedComponent))
+                        {
+                            <li>@control</li>
+                        }
+                    </ul>
+                </div>
+            }
+
+            <h3>Data Flow Registry (@GetFilteredFlows().Count())</h3>
+            <table class="table-shell">
+                <thead>
+                    <tr>
+                        <th>From</th>
+                        <th>To</th>
+                        <th>Categories</th>
+                        <th>Purpose</th>
+                        <th>Protection</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    @foreach (var flow in GetFilteredFlows())
+                    {
+                        <tr class="@GetFlowRiskClass(flow)">
+                            <td>@ResolveComponentName(flow.FromComponentId)</td>
+                            <td>@ResolveComponentName(flow.ToComponentId)</td>
+                            <td>@string.Join(", ", flow.DataCategories)</td>
+                            <td>@flow.Purpose</td>
+                            <td>@(flow.EncryptionInTransit ? "Encrypted" : "Unencrypted")</td>
+                        </tr>
+                    }
+                </tbody>
+            </table>
 
             <EditForm FormName="system-add-component-form" Model="_newComponent" OnValidSubmit="AddComponentAsync">
+                <h3>Register Component</h3>
                 <div class="field-grid">
                     <InputText @bind-Value="_newComponent.Name" class="text-input" placeholder="Component name" />
                     <InputText @bind-Value="_newComponent.Type" class="text-input" placeholder="Type" />
@@ -124,15 +187,8 @@ else
                 <button class="btn-small" type="submit">Register Component</button>
             </EditForm>
 
-            <h3>Data Flows (@_architecture.Flows.Count)</h3>
-            <ul>
-                @foreach (var flow in _architecture.Flows)
-                {
-                    <li>@ResolveComponentName(flow.FromComponentId) -> @ResolveComponentName(flow.ToComponentId) (@string.Join(", ", flow.DataCategories))</li>
-                }
-            </ul>
-
             <EditForm FormName="system-add-flow-form" Model="_newFlow" OnValidSubmit="AddFlowAsync">
+                <h3>Register Data Flow</h3>
                 <div class="field-grid">
                     <InputSelect @bind-Value="_newFlow.FromComponentId" class="text-input">
                         <option value="@Guid.Empty">From component</option>
@@ -164,6 +220,7 @@ else
             </ul>
 
             <EditForm FormName="system-add-store-form" Model="_newStore" OnValidSubmit="AddStoreAsync">
+                <h3>Register Data Store</h3>
                 <div class="field-grid">
                     <InputSelect @bind-Value="_newStore.ComponentId" class="text-input">
                         <option value="@Guid.Empty">Component</option>
@@ -346,6 +403,41 @@ else
         @if (_currentVersionId is not null && IsTab("Evidence"))
         {
             <h2>Evidence Locker</h2>
+            <div class="grid-cards" style="margin-bottom: 0.8rem;">
+                <section class="metric-card">
+                    <h3>Evidence Completeness</h3>
+                    <p>@EvidenceCompletenessPercent%</p>
+                </section>
+                <section class="metric-card">
+                    <h3>Unlinked Claims</h3>
+                    <p>@MissingEvidenceTargets.Count()</p>
+                </section>
+                <section class="metric-card">
+                    <h3>Expired Evidence</h3>
+                    <p>@ExpiredDocumentCount</p>
+                </section>
+                <section class="metric-card">
+                    <h3>Evidence Excerpts</h3>
+                    <p>@_documents.Sum(x => x.ExcerptCount)</p>
+                </section>
+            </div>
+
+            @if (ExpiredDocumentCount > 0)
+            {
+                <div class="alert-danger">Expired evidence warning: @ExpiredDocumentCount document(s) are older than 12 months and should be revalidated.</div>
+            }
+
+            @if (MissingEvidenceTargets.Any())
+            {
+                <h3>Missing Evidence Panel</h3>
+                <ul>
+                    @foreach (var missing in MissingEvidenceTargets.Take(12))
+                    {
+                        <li>@missing.TargetType | @missing.Title</li>
+                    }
+                </ul>
+            }
+
             <InputFile OnChange="UploadDocumentAsync" />
             @if (!string.IsNullOrWhiteSpace(_uploadMessage))
             {
@@ -498,6 +590,7 @@ else
     private List<Normyx.Web.Models.FindingDto> _findings = [];
     private List<Normyx.Web.Models.ActionItemDto> _actions = [];
     private Normyx.Web.Models.ActionBoardDto _actionBoard = new([], [], [], []);
+    private Normyx.Web.Models.EvidenceMapResponse _evidenceMap = new([], [], []);
     private Normyx.Web.Models.EvidenceGapsResponse _evidenceGaps = new(0, [], []);
     private List<Normyx.Web.Models.RagSearchResultDto> _evidenceHits = [];
     private List<Normyx.Web.Models.DocumentListItemDto> _documents = [];
@@ -520,6 +613,9 @@ else
     private readonly ExportForm _exportForm = new();
     private string _evidenceQuery = "DPIA lawful basis transfer";
     private string _activeTab = "Overview";
+    private Guid? _selectedComponentId;
+    private bool _showPersonalDataOnly;
+    private bool _showHighRiskFlowsOnly;
 
     private static readonly string[] WorkspaceTabs =
     [
@@ -581,10 +677,16 @@ else
     private async Task LoadVersionDataAsync(Guid versionId)
     {
         _architecture = await Api.GetAsync<Normyx.Web.Models.ArchitectureResponse>($"/versions/{versionId}/architecture") ?? new([], [], []);
+        if (_selectedComponentId is null || !_architecture.Components.Any(x => x.Id == _selectedComponentId.Value))
+        {
+            _selectedComponentId = _architecture.Components.FirstOrDefault()?.Id;
+        }
+
         _inventory = await Api.GetAsync<Normyx.Web.Models.InventoryResponse>($"/versions/{versionId}/inventory") ?? new([], []);
         _assessments = (await Api.GetAsync<List<Normyx.Web.Models.AssessmentListItem>>($"/versions/{versionId}/assessments")) ?? [];
         _actions = (await Api.GetAsync<List<Normyx.Web.Models.ActionItemDto>>($"/actions/version/{versionId}")) ?? [];
         _actionBoard = (await Api.GetAsync<Normyx.Web.Models.ActionBoardDto>($"/actions/board/{versionId}")) ?? new([], [], [], []);
+        _evidenceMap = await Api.GetAsync<Normyx.Web.Models.EvidenceMapResponse>($"/versions/{versionId}/evidence/map") ?? new([], [], []);
         _evidenceGaps = await Api.GetAsync<Normyx.Web.Models.EvidenceGapsResponse>($"/versions/{versionId}/evidence/gaps") ?? new(0, [], []);
         _exports = (await Api.GetAsync<List<Normyx.Web.Models.ExportListItemDto>>($"/exports/versions/{versionId}")) ?? [];
         _documents = (await Api.GetAsync<List<Normyx.Web.Models.DocumentListItemDto>>("/documents")) ?? [];
@@ -1061,6 +1163,128 @@ else
             _ => "critical"
         };
     }
+
+    private IEnumerable<IGrouping<string, Normyx.Web.Models.ComponentDto>> GetTrustZoneGroups()
+        => _architecture.Components
+            .GroupBy(component => string.IsNullOrWhiteSpace(component.TrustZone) ? "Unassigned Zone" : component.TrustZone)
+            .OrderBy(group => group.Key);
+
+    private bool IsSelectedComponent(Guid componentId)
+        => _selectedComponentId is not null && _selectedComponentId == componentId;
+
+    private void SelectComponent(Guid componentId)
+        => _selectedComponentId = componentId;
+
+    private Normyx.Web.Models.ComponentDto? GetSelectedComponent()
+        => _selectedComponentId is null
+            ? null
+            : _architecture.Components.FirstOrDefault(x => x.Id == _selectedComponentId.Value);
+
+    private string GetComponentRiskClass(Normyx.Web.Models.ComponentDto component)
+    {
+        var sensitivity = component.DataSensitivityLevel?.Trim().ToLowerInvariant() ?? "medium";
+        return sensitivity switch
+        {
+            "critical" => "critical",
+            "high" => "high",
+            "low" => "low",
+            _ => "medium"
+        };
+    }
+
+    private string GetComponentRiskLabel(Normyx.Web.Models.ComponentDto component)
+        => GetComponentRiskClass(component) switch
+        {
+            "critical" => "Critical",
+            "high" => "High",
+            "low" => "Low",
+            _ => "Medium"
+        };
+
+    private string GetComponentRiskTooltip(Normyx.Web.Models.ComponentDto component)
+    {
+        var risk = GetComponentRiskLabel(component);
+        return $"{component.Name}: {risk} risk because sensitivity is '{component.DataSensitivityLevel}' in zone '{component.TrustZone}'.";
+    }
+
+    private IEnumerable<string> GetSuggestedControls(Normyx.Web.Models.ComponentDto component)
+    {
+        var risk = GetComponentRiskClass(component);
+        if (risk is "critical" or "high")
+        {
+            return
+            [
+                "Enforce strict role-based access and privileged access reviews.",
+                "Maintain incident response playbooks with regulatory notification timelines.",
+                "Capture immutable logging and retention evidence per control cycle."
+            ];
+        }
+
+        return
+        [
+            "Document standard access control and data minimization controls.",
+            "Validate encryption in transit and at rest with periodic evidence refresh."
+        ];
+    }
+
+    private IEnumerable<Normyx.Web.Models.DataFlowDto> GetFilteredFlows()
+        => _architecture.Flows
+            .Where(flow => !_showPersonalDataOnly || IsPersonalDataFlow(flow))
+            .Where(flow => !_showHighRiskFlowsOnly || IsHighRiskFlow(flow));
+
+    private string GetFlowRiskClass(Normyx.Web.Models.DataFlowDto flow)
+    {
+        if (IsHighRiskFlow(flow))
+        {
+            return "risk-row-critical";
+        }
+
+        if (IsPersonalDataFlow(flow))
+        {
+            return "risk-row-high";
+        }
+
+        return string.Empty;
+    }
+
+    private static bool IsPersonalDataFlow(Normyx.Web.Models.DataFlowDto flow)
+        => flow.DataCategories.Any(category => category.Contains("personal", StringComparison.OrdinalIgnoreCase));
+
+    private bool IsHighRiskFlow(Normyx.Web.Models.DataFlowDto flow)
+    {
+        var from = _architecture.Components.FirstOrDefault(x => x.Id == flow.FromComponentId);
+        var to = _architecture.Components.FirstOrDefault(x => x.Id == flow.ToComponentId);
+
+        return (from is not null && GetComponentRiskClass(from) is "high" or "critical") ||
+               (to is not null && GetComponentRiskClass(to) is "high" or "critical") ||
+               !flow.EncryptionInTransit;
+    }
+
+    private int EvidenceCompletenessPercent
+    {
+        get
+        {
+            var totalTargets = _evidenceMap.Actions.Count + _evidenceMap.Findings.Count + _evidenceMap.Controls.Count;
+            if (totalTargets == 0)
+            {
+                return 100;
+            }
+
+            var linkedTargets = _evidenceMap.Actions.Count(x => x.Evidence.Count > 0) +
+                                _evidenceMap.Findings.Count(x => x.Evidence.Count > 0) +
+                                _evidenceMap.Controls.Count(x => x.Evidence.Count > 0);
+            return (int)Math.Round((double)linkedTargets / totalTargets * 100, MidpointRounding.AwayFromZero);
+        }
+    }
+
+    private IEnumerable<Normyx.Web.Models.EvidenceTargetDto> MissingEvidenceTargets
+        => _evidenceMap.Actions
+            .Concat(_evidenceMap.Findings)
+            .Concat(_evidenceMap.Controls)
+            .Where(target => target.Evidence.Count == 0);
+
+    private int ExpiredDocumentCount
+        => _documents.Count(document => document.UploadedAt < DateTimeOffset.UtcNow.AddMonths(-12));
 
     private void EnsureEvidenceLinkDefaults()
     {

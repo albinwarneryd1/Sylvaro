@@ -272,6 +272,71 @@ a {
     border-left-color: var(--info);
 }
 
+.zone-grid {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: var(--space-2);
+    margin: var(--space-2) 0 var(--space-3);
+}
+
+.zone-card {
+    border: 1px solid var(--border-soft);
+    border-radius: var(--radius-md);
+    padding: var(--space-2);
+    background: var(--surface-muted);
+    display: grid;
+    gap: var(--space-2);
+}
+
+.zone-card header {
+    display: flex;
+    justify-content: space-between;
+    align-items: baseline;
+}
+
+.component-node {
+    display: grid;
+    gap: 0.2rem;
+    width: 100%;
+    text-align: left;
+    border: 1px solid var(--border-soft);
+    border-left: 4px solid var(--info);
+    border-radius: var(--radius-sm);
+    background: #fff;
+    padding: 0.45rem 0.5rem;
+    cursor: pointer;
+}
+
+.component-node span {
+    color: var(--text-subtle);
+    font-size: 0.76rem;
+}
+
+.component-node.low {
+    border-left-color: var(--success);
+}
+
+.component-node.medium {
+    border-left-color: var(--warning);
+}
+
+.component-node.high,
+.component-node.critical {
+    border-left-color: var(--danger);
+}
+
+.component-node.active {
+    outline: 1px solid var(--info);
+}
+
+.risk-row-high td {
+    background: color-mix(in srgb, var(--warning) 8%, #fff);
+}
+
+.risk-row-critical td {
+    background: color-mix(in srgb, var(--danger) 8%, #fff);
+}
+
 .risk-pill {
     display: inline-flex;
     align-items: center;
@@ -452,7 +517,8 @@ a {
 
     .field-grid,
     .grid-cards,
-    .kanban-board {
+    .kanban-board,
+    .zone-grid {
         grid-template-columns: 1fr;
     }
 
