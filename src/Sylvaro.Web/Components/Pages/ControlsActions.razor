@@ -1,0 +1,72 @@
+@page "/controls-actions"
+@inject Sylvaro.Web.Services.SylvaroApiClient Api
+@inject Sylvaro.Web.Services.AuthSession Session
+
+<PageTitle>Controls and Actions - Sylvaro</PageTitle>
+
+@if (!Session.IsInitialized)
+{
+    <div class="card-shell"><p>Restoring secure session...</p></div>
+}
+else if (!Session.IsAuthenticated)
+{
+    <div class="card-shell"><p>Authentication required. Use <a href="/login">Sign In</a> to review controls and obligations.</p></div>
+}
+else
+{
+    <div class="section-head">
+        <div>
+            <h1>Controls and Obligations</h1>
+            <p>Execution-oriented view of remediation workload and policy obligations.</p>
+        </div>
+        <div class="status-line">
+            <span class="risk-pill warning">Outstanding Compliance Obligations: @_dashboard?.OpenActions</span>
+            <span class="risk-pill info">Systems in Scope: @_dashboard?.SystemCount</span>
+        </div>
+    </div>
+
+    <div class="card-shell">
+        <p class="context-text">Open each AI system workspace to assign owners, approve outcomes, and complete sign-off workflow.</p>
+        <table class="table-shell">
+            <thead>
+                <tr>
+                    <th>AI System</th>
+                    <th>Status</th>
+                    <th>Last Updated</th>
+                    <th>Actions</th>
+                </tr>
+            </thead>
+            <tbody>
+                @foreach (var system in _systems.OrderByDescending(x => x.UpdatedAt))
+                {
+                    <tr>
+                        <td>@system.Name</td>
+                        <td><span class="risk-pill @ToStatusStyle(system.Status)">@system.Status</span></td>
+                        <td>@system.UpdatedAt.ToString("u")</td>
+                        <td><a class="btn-small" href="/ai-systems/@system.Id">Open Workspace</a></td>
+                    </tr>
+                }
+            </tbody>
+        </table>
+    </div>
+}
+
+@code {
+    private Sylvaro.Web.Models.DashboardTenantDto? _dashboard;
+    private List<Sylvaro.Web.Models.AiSystemListItem> _systems = [];
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (!firstRender || !Session.IsAuthenticated)
+        {
+            return;
+        }
+
+        _dashboard = await Api.GetAsync<Sylvaro.Web.Models.DashboardTenantDto>("/dashboard/tenant");
+        _systems = (await Api.GetAsync<List<Sylvaro.Web.Models.AiSystemListItem>>("/aisystems")) ?? [];
+        await InvokeAsync(StateHasChanged);
+    }
+
+    private static string ToStatusStyle(string status)
+        => status.Equals("Active", StringComparison.OrdinalIgnoreCase) ? "success" : "warning";
+}

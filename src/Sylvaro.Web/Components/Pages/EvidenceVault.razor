@@ -1,0 +1,68 @@
+@page "/evidence-vault"
+@inject Sylvaro.Web.Services.SylvaroApiClient Api
+@inject Sylvaro.Web.Services.AuthSession Session
+
+<PageTitle>Evidence Vault - Sylvaro</PageTitle>
+
+@if (!Session.IsInitialized)
+{
+    <div class="card-shell"><p>Restoring secure session...</p></div>
+}
+else if (!Session.IsAuthenticated)
+{
+    <div class="card-shell"><p>Authentication required. Use <a href="/login">Sign In</a> to review evidence assets.</p></div>
+}
+else
+{
+    <div class="section-head">
+        <div>
+            <h1>Evidence Vault</h1>
+            <p>Controlled repository for compliance documentation and evidence traceability.</p>
+        </div>
+        <div class="status-line">
+            <span class="risk-pill info">Documents: @_documents.Count</span>
+            <span class="risk-pill info">Excerpts: @_documents.Sum(x => x.ExcerptCount)</span>
+        </div>
+    </div>
+
+    <div class="card-shell">
+        <table class="table-shell">
+            <thead>
+                <tr>
+                    <th>Document</th>
+                    <th>Type</th>
+                    <th>Uploaded</th>
+                    <th>Tags</th>
+                    <th>Excerpts</th>
+                </tr>
+            </thead>
+            <tbody>
+                @foreach (var doc in _documents)
+                {
+                    <tr>
+                        <td>@doc.FileName</td>
+                        <td>@doc.MimeType</td>
+                        <td>@doc.UploadedAt.ToString("u")</td>
+                        <td>@string.Join(", ", doc.Tags)</td>
+                        <td>@doc.ExcerptCount</td>
+                    </tr>
+                }
+            </tbody>
+        </table>
+    </div>
+}
+
+@code {
+    private List<Sylvaro.Web.Models.DocumentListItemDto> _documents = [];
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (!firstRender || !Session.IsAuthenticated)
+        {
+            return;
+        }
+
+        _documents = (await Api.GetAsync<List<Sylvaro.Web.Models.DocumentListItemDto>>("/documents")) ?? [];
+        await InvokeAsync(StateHasChanged);
+    }
+}

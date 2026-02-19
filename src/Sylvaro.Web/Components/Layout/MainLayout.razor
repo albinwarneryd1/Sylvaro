@@ -13,22 +13,32 @@
         <header class="governance-topbar">
             <div class="topbar-left">
                 <img class="wordmark-image" src="/brand/sylvaro-wordmark.svg" alt="SYLVARO" />
-                <span class="brand-sub">Regulatory Intelligence Infrastructure</span>
+                <span class="brand-sub">Compliance Intelligence Infrastructure</span>
             </div>
+
             <div class="topbar-center">
-                <span class="context-kicker">Current System Context</span>
+                <span class="context-kicker">Current system context</span>
                 <strong>@CurrentContextLabel</strong>
             </div>
+
             <div class="topbar-right">
                 @if (Session.IsAuthenticated)
                 {
-                    <span class="session-pill">Role: @PrimaryRole</span>
-                    <span class="session-pill">Tenant: @Session.TenantName</span>
-                    <span class="session-pill">Session Expires: @FormatTimestamp(Session.RefreshTokenExpiresAt)</span>
+                    <span class="session-chip">Tenant: @Session.TenantName</span>
+                    <span class="session-chip">User: @Session.Email</span>
+                    <span class="session-chip">Role: @PrimaryRole</span>
+                    <details class="session-menu">
+                        <summary>Session</summary>
+                        <div class="session-menu-panel">
+                            <p><strong>Last login</strong><br />@FormatTimestamp(Session.LastAuthenticatedAt)</p>
+                            <p><strong>Expires</strong><br />@FormatTimestamp(Session.RefreshTokenExpiresAt)</p>
+                            <p><strong>Status</strong><br />Active authenticated session</p>
+                        </div>
+                    </details>
                 }
                 else
                 {
-                    <span class="session-pill">Access: Not authenticated</span>
+                    <span class="session-chip">Public access</span>
                 }
             </div>
         </header>
@@ -46,7 +56,7 @@
 
         <footer class="platform-footer">
             <span>SYLVARO | Compliance Intelligence Platform</span>
-            <span>Version 1.0.0 | Policy Pack Version 2026.1</span>
+            <span>Version 1.1.0 | Policy Pack Version 2026.1</span>
         </footer>
     </main>
 </div>
@@ -94,7 +104,10 @@
         => _currentPath switch
         {
             var path when path.StartsWith("ai-systems/", StringComparison.OrdinalIgnoreCase) => "AI System Governance Workspace",
-            var path when path.StartsWith("ai-systems", StringComparison.OrdinalIgnoreCase) => "AI System Inventory Oversight",
+            var path when path.StartsWith("ai-systems", StringComparison.OrdinalIgnoreCase) => "AI Systems Inventory",
+            var path when path.StartsWith("regulatory-exposure", StringComparison.OrdinalIgnoreCase) => "Regulatory Exposure Matrix",
+            var path when path.StartsWith("controls-actions", StringComparison.OrdinalIgnoreCase) => "Controls and Obligations",
+            var path when path.StartsWith("evidence-vault", StringComparison.OrdinalIgnoreCase) => "Evidence Vault",
             var path when path.StartsWith("tenant-settings", StringComparison.OrdinalIgnoreCase) => "Tenant Governance Configuration",
             var path when path.StartsWith("audit-log", StringComparison.OrdinalIgnoreCase) => "Regulatory Audit Trail",
             var path when path.StartsWith("security-center", StringComparison.OrdinalIgnoreCase) => "Security Governance Center",
