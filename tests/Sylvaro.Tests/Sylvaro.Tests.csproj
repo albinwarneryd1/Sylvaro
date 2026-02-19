@@ -28,4 +28,8 @@
     <ProjectReference Include="..\..\src\Sylvaro.Domain\Sylvaro.Domain.csproj" />
   </ItemGroup>
 
+  <ItemGroup>
+    <ProjectReference Include="..\..\src\Sylvaro.Web\Sylvaro.Web.csproj" />
+  </ItemGroup>
+
 </Project>
