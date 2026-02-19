@@ -1,5 +1,6 @@
 @page "/security-center"
 @using System.Security.Cryptography
+@inject Normyx.Web.Services.NormyxApiClient Api
 @inject Normyx.Web.Services.AuthSession Session
 
 <PageTitle>Security Center - Normyx AI</PageTitle>
@@ -34,17 +35,47 @@ else
                 <li>Refresh token expiry: @FormatTimestamp(Session.RefreshTokenExpiresAt)</li>
                 <li>Session policy: 60 min idle timeout (target policy)</li>
             </ul>
+            <div class="btn-row">
+                <button class="btn-small" @onclick="RefreshSessionsAsync" disabled="_loadingSessions">Refresh Sessions</button>
+                <button class="btn-small" @onclick="RevokeOtherSessionsAsync" disabled="_loadingSessions">Force Logout Other Sessions</button>
+            </div>
+            @if (!string.IsNullOrWhiteSpace(_sessionMessage))
+            {
+                <p>@_sessionMessage</p>
+            }
+            @if (!string.IsNullOrWhiteSpace(_error))
+            {
+                <div class="alert-danger">@_error</div>
+            }
             <table class="table-shell">
-                <thead><tr><th>Session</th><th>IP</th><th>Started</th><th>Status</th></tr></thead>
+                <thead><tr><th>Session</th><th>IP</th><th>User Agent</th><th>Started</th><th>Expires</th><th>Status</th><th></th></tr></thead>
                 <tbody>
-                    @foreach (var item in _activeSessions)
+                    @if (_loadingSessions)
                     {
                         <tr>
-                            <td>@item.SessionRef</td>
-                            <td>@item.Ip</td>
-                            <td>@item.StartedAt.ToString("u")</td>
-                            <td><span class="risk-pill info">@item.Status</span></td>
+                            <td colspan="7">Loading sessions...</td>
                         </tr>
+                    }
+                    else if (_activeSessions.Count == 0)
+                    {
+                        <tr>
+                            <td colspan="7">No active refresh sessions found.</td>
+                        </tr>
+                    }
+                    else
+                    {
+                        @foreach (var item in _activeSessions)
+                        {
+                            <tr>
+                                <td>@item.SessionRef</td>
+                                <td>@item.Ip</td>
+                                <td>@TrimUserAgent(item.UserAgent)</td>
+                                <td>@item.CreatedAt.ToString("u")</td>
+                                <td>@item.ExpiresAt.ToString("u")</td>
+                                <td><span class="risk-pill info">Active</span></td>
+                                <td><button class="btn-small" @onclick="() => RevokeSessionAsync(item.Id)" disabled="_loadingSessions">Force Logout</button></td>
+                            </tr>
+                        }
                     }
                 </tbody>
             </table>
@@ -97,15 +128,87 @@ else
 
 @code {
     private bool _mfaPlaceholder;
+    private bool _loadingSessions;
     private string _tokenName = "integration-token";
     private string _tokenScope = "read:all";
+    private string _error = string.Empty;
+    private string _sessionMessage = string.Empty;
 
-    private readonly List<SessionRow> _activeSessions =
-    [
-        new($"sess-{Guid.NewGuid().ToString()[..8]}", "current-client", DateTimeOffset.UtcNow.AddMinutes(-5), "Active")
-    ];
+    private List<Normyx.Web.Models.SecuritySessionDto> _activeSessions = [];
 
     private readonly List<TokenRow> _tokens = [];
+
+    protected override async Task OnInitializedAsync()
+    {
+        if (!Session.IsAuthenticated)
+        {
+            return;
+        }
+
+        await RefreshSessionsAsync();
+    }
+
+    private async Task RefreshSessionsAsync()
+    {
+        try
+        {
+            _loadingSessions = true;
+            _error = string.Empty;
+            _sessionMessage = string.Empty;
+            _activeSessions = (await Api.GetAsync<List<Normyx.Web.Models.SecuritySessionDto>>("/security/sessions")) ?? [];
+        }
+        catch (Exception ex)
+        {
+            _error = ex.Message;
+        }
+        finally
+        {
+            _loadingSessions = false;
+        }
+    }
+
+    private async Task RevokeSessionAsync(Guid sessionId)
+    {
+        try
+        {
+            _loadingSessions = true;
+            _error = string.Empty;
+            await Api.DeleteAsync($"/security/sessions/{sessionId}");
+            await RefreshSessionsAsync();
+            _sessionMessage = "Selected session has been revoked.";
+        }
+        catch (Exception ex)
+        {
+            _error = ex.Message;
+        }
+        finally
+        {
+            _loadingSessions = false;
+        }
+    }
+
+    private async Task RevokeOtherSessionsAsync()
+    {
+        try
+        {
+            _loadingSessions = true;
+            _error = string.Empty;
+            await Api.PostAsync("/security/sessions/revoke-others", new
+            {
+                currentRefreshToken = Session.RefreshToken
+            });
+            await RefreshSessionsAsync();
+            _sessionMessage = "All other active sessions have been revoked.";
+        }
+        catch (Exception ex)
+        {
+            _error = ex.Message;
+        }
+        finally
+        {
+            _loadingSessions = false;
+        }
+    }
 
     private void CreateToken()
     {
@@ -128,6 +231,15 @@ else
     private static string FormatTimestamp(DateTimeOffset value)
         => value == default ? "n/a" : value.UtcDateTime.ToString("yyyy-MM-dd HH:mm:ss 'UTC'");
 
-    private sealed record SessionRow(string SessionRef, string Ip, DateTimeOffset StartedAt, string Status);
+    private static string TrimUserAgent(string userAgent)
+    {
+        if (string.IsNullOrWhiteSpace(userAgent))
+        {
+            return "unknown";
+        }
+
+        return userAgent.Length <= 72 ? userAgent : $"{userAgent[..72]}...";
+    }
+
     private sealed record TokenRow(Guid Id, string Name, string Scope, DateTimeOffset CreatedAt, string TokenRef);
 }
