@@ -23,6 +23,7 @@ else
             <span class="risk-pill info">MFA Status: Planned</span>
             <span class="risk-pill success">Password Policy: Enforced</span>
             <span class="risk-pill warning">Active Sessions: @_activeSessions.Count</span>
+            <span class="risk-pill info">Available Roles: @_roles.Count</span>
         </div>
     </div>
 
@@ -88,6 +89,22 @@ else
                 <li>Complexity rule: upper/lower/number/symbol</li>
                 <li>Rotation policy: every 90 days for admin users</li>
                 <li>Audit events: login success/failure + token lifecycle</li>
+            </ul>
+        </section>
+
+        <section class="card-shell">
+            <h2>Role & API Protection Overview</h2>
+            <ul>
+                @foreach (var role in _roles)
+                {
+                    <li>@role.Name</li>
+                }
+            </ul>
+            <h3>Rate Limiting Policy</h3>
+            <ul>
+                <li>Global API quota: 200 requests / minute per client IP</li>
+                <li>Authentication endpoints: 20 requests / minute per client IP</li>
+                <li>429 responses are audited with correlation IDs</li>
             </ul>
         </section>
 
@@ -163,6 +180,7 @@ else
 
     private List<Normyx.Web.Models.SecuritySessionDto> _activeSessions = [];
     private List<Normyx.Web.Models.ApiTokenDto> _tokens = [];
+    private List<Normyx.Web.Models.RoleDto> _roles = [];
 
     protected override async Task OnInitializedAsync()
     {
@@ -173,6 +191,7 @@ else
 
         await RefreshSessionsAsync();
         await RefreshApiTokensAsync();
+        await LoadRolesAsync();
     }
 
     private async Task RefreshSessionsAsync()
@@ -211,6 +230,18 @@ else
         finally
         {
             _loadingTokens = false;
+        }
+    }
+
+    private async Task LoadRolesAsync()
+    {
+        try
+        {
+            _roles = (await Api.GetAsync<List<Normyx.Web.Models.RoleDto>>("/tenants/roles")) ?? [];
+        }
+        catch (Exception ex)
+        {
+            _error = ex.Message;
         }
     }
 
@@ -337,5 +368,6 @@ else
     {
         await RefreshSessionsAsync();
         await RefreshApiTokensAsync();
+        await LoadRolesAsync();
     }
 }
