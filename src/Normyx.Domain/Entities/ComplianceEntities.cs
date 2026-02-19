@@ -57,6 +57,19 @@ public class RefreshToken
     public User User { get; set; } = null!;
 }
 
+public class ApiToken
+{
+    public Guid Id { get; set; }
+    public Guid TenantId { get; set; }
+    public Guid CreatedByUserId { get; set; }
+    public string Name { get; set; } = string.Empty;
+    public string Scope { get; set; } = string.Empty;
+    public string TokenHash { get; set; } = string.Empty;
+    public string TokenPrefix { get; set; } = string.Empty;
+    public DateTimeOffset CreatedAt { get; set; } = DateTimeOffset.UtcNow;
+    public DateTimeOffset? RevokedAt { get; set; }
+}
+
 public class AiSystem
 {
     public Guid Id { get; set; }

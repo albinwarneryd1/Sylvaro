@@ -370,6 +370,49 @@ public class TenantIsolationTests : IAsyncLifetime
         Assert.Contains("forbidden", payload, StringComparison.OrdinalIgnoreCase);
     }
 
+    [Fact]
+    public async Task ApiTokens_AdminCanCreateListAndRevoke()
+    {
+        if (!_dockerAvailable)
+        {
+            return;
+        }
+
+        var client = _factory.CreateClient(new WebApplicationFactoryClientOptions
+        {
+            BaseAddress = new Uri("http://localhost")
+        });
+
+        var token = await LoginAsync(client, "NordicFin AB", "admin@nordicfin.example", "ChangeMe123!");
+        var createResponse = await SendAuthorizedAsync(client, token, HttpMethod.Post, "/security/api-tokens", new
+        {
+            name = "integration-pipeline",
+            scope = "export:reports"
+        });
+        Assert.Equal(System.Net.HttpStatusCode.Created, createResponse.StatusCode);
+
+        var createdPayload = await createResponse.Content.ReadAsStringAsync();
+        using var createdDoc = JsonDocument.Parse(createdPayload);
+        var tokenId = createdDoc.RootElement.GetProperty("id").GetGuid();
+        var tokenValue = createdDoc.RootElement.GetProperty("tokenValue").GetString();
+        Assert.False(string.IsNullOrWhiteSpace(tokenValue));
+        Assert.StartsWith("nxa_", tokenValue, StringComparison.Ordinal);
+
+        var listBeforeRevoke = await SendAuthorizedAsync(client, token, HttpMethod.Get, "/security/api-tokens");
+        listBeforeRevoke.EnsureSuccessStatusCode();
+        var beforePayload = await listBeforeRevoke.Content.ReadAsStringAsync();
+        Assert.Contains("integration-pipeline", beforePayload, StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain(tokenValue!, beforePayload, StringComparison.Ordinal);
+
+        var revokeResponse = await SendAuthorizedAsync(client, token, HttpMethod.Delete, $"/security/api-tokens/{tokenId}");
+        Assert.Equal(System.Net.HttpStatusCode.NoContent, revokeResponse.StatusCode);
+
+        var listAfterRevoke = await SendAuthorizedAsync(client, token, HttpMethod.Get, "/security/api-tokens");
+        listAfterRevoke.EnsureSuccessStatusCode();
+        var afterPayload = await listAfterRevoke.Content.ReadAsStringAsync();
+        Assert.Contains("revokedAt", afterPayload, StringComparison.OrdinalIgnoreCase);
+    }
+
     private static async Task<string> LoginAsync(HttpClient client, string tenant, string email, string password)
     {
         var auth = await LoginWithTokensAsync(client, tenant, email, password);

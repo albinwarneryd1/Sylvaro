@@ -10,6 +10,7 @@ public class NormyxDbContext(DbContextOptions<NormyxDbContext> options) : DbCont
     public DbSet<Role> Roles => Set<Role>();
     public DbSet<UserRole> UserRoles => Set<UserRole>();
     public DbSet<RefreshToken> RefreshTokens => Set<RefreshToken>();
+    public DbSet<ApiToken> ApiTokens => Set<ApiToken>();
     public DbSet<AiSystem> AiSystems => Set<AiSystem>();
     public DbSet<AiSystemVersion> AiSystemVersions => Set<AiSystemVersion>();
     public DbSet<Component> Components => Set<Component>();
@@ -47,6 +48,8 @@ public class NormyxDbContext(DbContextOptions<NormyxDbContext> options) : DbCont
         modelBuilder.Entity<Role>().HasIndex(x => x.Name).IsUnique();
         modelBuilder.Entity<RefreshToken>().HasIndex(x => x.Token).IsUnique();
         modelBuilder.Entity<RefreshToken>().HasIndex(x => new { x.UserId, x.ExpiresAt });
+        modelBuilder.Entity<ApiToken>().HasIndex(x => new { x.TenantId, x.Name });
+        modelBuilder.Entity<ApiToken>().HasIndex(x => x.TokenHash).IsUnique();
         modelBuilder.Entity<AiSystem>().HasIndex(x => new { x.TenantId, x.Name });
         modelBuilder.Entity<AiSystemVersion>().HasIndex(x => new { x.AiSystemId, x.VersionNumber }).IsUnique();
 

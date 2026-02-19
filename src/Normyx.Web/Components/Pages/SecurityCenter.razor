@@ -1,5 +1,4 @@
 @page "/security-center"
-@using System.Security.Cryptography
 @inject Normyx.Web.Services.NormyxApiClient Api
 @inject Normyx.Web.Services.AuthSession Session
 
@@ -104,21 +103,46 @@ else
                 </InputSelect>
             </div>
             <div class="btn-row">
-                <button class="btn-small" @onclick="CreateToken">Create Token</button>
+                <button class="btn-small" @onclick="CreateTokenAsync" disabled="_loadingTokens">@(_loadingTokens ? "Creating..." : "Create Token")</button>
+                <button class="btn-small" @onclick="RefreshApiTokensAsync" disabled="_loadingTokens">Refresh Tokens</button>
             </div>
+            @if (!string.IsNullOrWhiteSpace(_tokenMessage))
+            {
+                <p>@_tokenMessage</p>
+            }
+            @if (!string.IsNullOrWhiteSpace(_newTokenValue))
+            {
+                <div class="alert-danger">Copy this token now (shown once): <strong>@_newTokenValue</strong></div>
+            }
 
             <table class="table-shell">
-                <thead><tr><th>Name</th><th>Scope</th><th>Created</th><th>Token Ref</th><th></th></tr></thead>
+                <thead><tr><th>Name</th><th>Scope</th><th>Created</th><th>Token Ref</th><th>Status</th><th></th></tr></thead>
                 <tbody>
-                    @foreach (var token in _tokens)
+                    @if (_loadingTokens)
                     {
                         <tr>
-                            <td>@token.Name</td>
-                            <td>@token.Scope</td>
-                            <td>@token.CreatedAt.ToString("u")</td>
-                            <td>@token.TokenRef</td>
-                            <td><button class="btn-small" @onclick="() => RevokeToken(token.Id)">Revoke</button></td>
+                            <td colspan="6">Loading tokens...</td>
                         </tr>
+                    }
+                    else if (_tokens.Count == 0)
+                    {
+                        <tr>
+                            <td colspan="6">No API tokens provisioned.</td>
+                        </tr>
+                    }
+                    else
+                    {
+                        @foreach (var token in _tokens)
+                        {
+                            <tr>
+                                <td>@token.Name</td>
+                                <td>@token.Scope</td>
+                                <td>@token.CreatedAt.ToString("u")</td>
+                                <td>@token.TokenPrefix</td>
+                                <td><span class="@($"risk-pill {(token.RevokedAt is null ? "success" : "warning")}")">@(token.RevokedAt is null ? "Active" : "Revoked")</span></td>
+                                <td><button class="btn-small" @onclick="() => RevokeTokenAsync(token.Id)" disabled="_loadingTokens || token.RevokedAt is not null">Revoke</button></td>
+                            </tr>
+                        }
                     }
                 </tbody>
             </table>
@@ -129,14 +153,16 @@ else
 @code {
     private bool _mfaPlaceholder;
     private bool _loadingSessions;
+    private bool _loadingTokens;
     private string _tokenName = "integration-token";
     private string _tokenScope = "read:all";
     private string _error = string.Empty;
     private string _sessionMessage = string.Empty;
+    private string _tokenMessage = string.Empty;
+    private string _newTokenValue = string.Empty;
 
     private List<Normyx.Web.Models.SecuritySessionDto> _activeSessions = [];
-
-    private readonly List<TokenRow> _tokens = [];
+    private List<Normyx.Web.Models.ApiTokenDto> _tokens = [];
 
     protected override async Task OnInitializedAsync()
     {
@@ -146,6 +172,7 @@ else
         }
 
         await RefreshSessionsAsync();
+        await RefreshApiTokensAsync();
     }
 
     private async Task RefreshSessionsAsync()
@@ -164,6 +191,26 @@ else
         finally
         {
             _loadingSessions = false;
+        }
+    }
+
+    private async Task RefreshApiTokensAsync()
+    {
+        try
+        {
+            _loadingTokens = true;
+            _error = string.Empty;
+            _tokenMessage = string.Empty;
+            _newTokenValue = string.Empty;
+            _tokens = (await Api.GetAsync<List<Normyx.Web.Models.ApiTokenDto>>("/security/api-tokens")) ?? [];
+        }
+        catch (Exception ex)
+        {
+            _error = ex.Message;
+        }
+        finally
+        {
+            _loadingTokens = false;
         }
     }
 
@@ -210,22 +257,67 @@ else
         }
     }
 
-    private void CreateToken()
+    private async Task CreateTokenAsync()
     {
         if (string.IsNullOrWhiteSpace(_tokenName))
         {
             return;
         }
 
-        var tokenBytes = RandomNumberGenerator.GetBytes(24);
-        var tokenRef = Convert.ToBase64String(tokenBytes);
-        _tokens.Insert(0, new TokenRow(Guid.NewGuid(), _tokenName.Trim(), _tokenScope, DateTimeOffset.UtcNow, $"nxa_{tokenRef[..10]}..."));
-        _tokenName = "integration-token";
+        try
+        {
+            _loadingTokens = true;
+            _error = string.Empty;
+            _tokenMessage = string.Empty;
+            _newTokenValue = string.Empty;
+
+            var result = await Api.PostAsync<Normyx.Web.Models.ApiTokenCreateResult>("/security/api-tokens", new
+            {
+                name = _tokenName,
+                scope = _tokenScope
+            });
+
+            if (result is null)
+            {
+                _error = "API token provisioning failed.";
+                return;
+            }
+
+            _newTokenValue = result.TokenValue;
+            _tokenMessage = "API token was provisioned. Store token value in your secret manager.";
+            _tokenName = "integration-token";
+            await RefreshApiTokensAsync();
+        }
+        catch (Exception ex)
+        {
+            _error = ex.Message;
+        }
+        finally
+        {
+            _loadingTokens = false;
+        }
     }
 
-    private void RevokeToken(Guid id)
+    private async Task RevokeTokenAsync(Guid id)
     {
-        _tokens.RemoveAll(x => x.Id == id);
+        try
+        {
+            _loadingTokens = true;
+            _error = string.Empty;
+            _tokenMessage = string.Empty;
+            _newTokenValue = string.Empty;
+            await Api.DeleteAsync($"/security/api-tokens/{id}");
+            _tokenMessage = "API token revoked.";
+            await RefreshApiTokensAsync();
+        }
+        catch (Exception ex)
+        {
+            _error = ex.Message;
+        }
+        finally
+        {
+            _loadingTokens = false;
+        }
     }
 
     private static string FormatTimestamp(DateTimeOffset value)
@@ -240,6 +332,4 @@ else
 
         return userAgent.Length <= 72 ? userAgent : $"{userAgent[..72]}...";
     }
-
-    private sealed record TokenRow(Guid Id, string Name, string Scope, DateTimeOffset CreatedAt, string TokenRef);
 }
