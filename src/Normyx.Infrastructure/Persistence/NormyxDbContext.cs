@@ -30,6 +30,7 @@ public class NormyxDbContext(DbContextOptions<NormyxDbContext> options) : DbCont
     public DbSet<ActionItem> ActionItems => Set<ActionItem>();
     public DbSet<AuditLog> AuditLogs => Set<AuditLog>();
     public DbSet<ExportArtifact> ExportArtifacts => Set<ExportArtifact>();
+    public DbSet<TenantIntegration> TenantIntegrations => Set<TenantIntegration>();
     public DbSet<RagChunk> RagChunks => Set<RagChunk>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
@@ -53,6 +54,7 @@ public class NormyxDbContext(DbContextOptions<NormyxDbContext> options) : DbCont
         modelBuilder.Entity<AiSystemVersion>().HasOne<User>().WithMany().HasForeignKey(x => x.CreatedByUserId).OnDelete(DeleteBehavior.Restrict);
 
         modelBuilder.Entity<AuditLog>().HasIndex(x => new { x.TenantId, x.Timestamp });
+        modelBuilder.Entity<TenantIntegration>().HasIndex(x => new { x.TenantId, x.Provider }).IsUnique();
 
         modelBuilder.Entity<RagChunk>()
             .Property(x => x.Embedding)

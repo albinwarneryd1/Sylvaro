@@ -9,6 +9,7 @@ using Normyx.Infrastructure.Audit;
 using Normyx.Infrastructure.AI;
 using Normyx.Infrastructure.Auth;
 using Normyx.Infrastructure.Extensions;
+using Normyx.Infrastructure.Integrations;
 using Normyx.Infrastructure.Persistence;
 using Normyx.Infrastructure.Rag;
 using Normyx.Infrastructure.Storage;
@@ -21,6 +22,8 @@ builder.Services.Configure<AiProviderOptions>(builder.Configuration.GetSection(A
 builder.Services.AddScoped<IObjectStorage, LocalObjectStorage>();
 builder.Services.AddScoped<IDocumentTextExtractor, BasicDocumentTextExtractor>();
 builder.Services.AddScoped<IRagService, RagService>();
+builder.Services.AddHttpClient("WebhookPublisher", client => client.Timeout = TimeSpan.FromSeconds(20));
+builder.Services.AddScoped<IWebhookPublisher, HttpWebhookPublisher>();
 
 builder.Services.AddHttpContextAccessor();
 builder.Services.Configure<JwtOptions>(builder.Configuration.GetSection(JwtOptions.SectionName));
@@ -114,6 +117,7 @@ app.MapInventoryEndpoints();
 app.MapDocumentEndpoints();
 app.MapEvidenceEndpoints();
 app.MapAuditEndpoints();
+app.MapIntegrationEndpoints();
 app.MapQuestionnaireEndpoints();
 app.MapAssessmentEndpoints();
 app.MapFindingEndpoints();

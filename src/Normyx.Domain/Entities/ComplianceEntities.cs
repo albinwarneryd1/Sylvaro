@@ -326,9 +326,22 @@ public class ExportArtifact
     public Guid TenantId { get; set; }
     public Guid AiSystemVersionId { get; set; }
     public string ExportType { get; set; } = string.Empty;
+    public string MimeType { get; set; } = "application/pdf";
     public string StorageRef { get; set; } = string.Empty;
     public Guid CreatedByUserId { get; set; }
     public DateTimeOffset CreatedAt { get; set; } = DateTimeOffset.UtcNow;
+}
+
+public class TenantIntegration
+{
+    public Guid Id { get; set; }
+    public Guid TenantId { get; set; }
+    public string Provider { get; set; } = string.Empty;
+    public string WebhookUrl { get; set; } = string.Empty;
+    public string? AuthHeader { get; set; }
+    public bool IsEnabled { get; set; }
+    public DateTimeOffset CreatedAt { get; set; } = DateTimeOffset.UtcNow;
+    public DateTimeOffset UpdatedAt { get; set; } = DateTimeOffset.UtcNow;
 }
 
 public class RagChunk
