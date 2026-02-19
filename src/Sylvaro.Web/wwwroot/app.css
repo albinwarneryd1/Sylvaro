@@ -629,16 +629,17 @@ input.text-input {
 
 .score-meter {
     margin-top: var(--space-1);
-    height: 8px;
-    border-radius: 3px;
-    background: var(--surface-muted);
+    height: 9px;
+    border-radius: 4px;
+    background: #e7dece;
+    border: 1px solid var(--border-subtle);
     overflow: hidden;
 }
 
 .score-meter i {
     display: block;
     height: 100%;
-    background: var(--brand-accent);
+    background: linear-gradient(90deg, var(--brand-primary) 0%, var(--brand-accent) 100%);
 }
 
 .donut-chart {
@@ -786,28 +787,51 @@ input.text-input {
 }
 
 .score-orb {
+    --score-pct: 0%;
     border: 1px solid var(--border-accent);
-    background: var(--surface-elevated);
+    background: linear-gradient(180deg, #ffffff 0%, #f3eee6 100%);
     border-radius: var(--radius-sm);
     display: grid;
     align-content: center;
     justify-items: center;
-    gap: 0.16rem;
-    padding: 0.66rem;
+    gap: 0.28rem;
+    padding: 0.78rem 0.72rem;
+    box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--accent-2) 15%, #ffffff), 0 2px 8px rgba(31, 28, 24, 0.06);
+}
+
+.score-ring {
+    width: 132px;
+    height: 132px;
+    border-radius: 50%;
+    background: conic-gradient(var(--brand-accent) 0 var(--score-pct), #e5ddcf var(--score-pct) 100%);
+    display: grid;
+    place-items: center;
+    position: relative;
+}
+
+.score-ring::after {
+    content: "";
+    position: absolute;
+    inset: 14px;
+    border-radius: 50%;
+    background: var(--surface-panel);
+    border: 1px solid var(--border-subtle);
 }
 
 .score-orb .score-value {
+    position: relative;
+    z-index: 1;
     font-family: var(--font-brand);
     color: var(--brand-primary);
-    font-size: 2rem;
+    font-size: 2.8rem;
     line-height: 1;
 }
 
 .score-orb .score-caption {
-    font-size: 0.72rem;
+    font-size: 0.62rem;
     color: var(--text-muted);
     text-transform: uppercase;
-    letter-spacing: 0.12em;
+    letter-spacing: 0.16em;
 }
 
 .delta {

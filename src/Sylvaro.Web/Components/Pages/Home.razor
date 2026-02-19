@@ -94,9 +94,11 @@ else
             </div>
 
             <div class="posture-main">
-                <div class="score-orb">
+                <div class="score-orb" style="@($"--score-pct:{ComplianceScore}%")">
                     <span class="score-caption">Compliance Instrument</span>
-                    <span class="score-value">@ComplianceScore</span>
+                    <div class="score-ring">
+                        <span class="score-value">@ComplianceScore</span>
+                    </div>
                     <div class="score-meter"><i style="@($"width:{ComplianceScore}%")"></i></div>
                 </div>
                 <div class="posture-grid">
