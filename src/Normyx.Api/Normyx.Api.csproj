@@ -20,6 +20,7 @@
   <ItemGroup>
     <None Include="..\..\policy-packs\**\*.json" Link="policy-packs\%(RecursiveDir)%(Filename)%(Extension)" CopyToOutputDirectory="PreserveNewest" />
     <None Include="..\..\prompts\**\*.txt" Link="prompts\%(RecursiveDir)%(Filename)%(Extension)" CopyToOutputDirectory="PreserveNewest" />
+    <None Include="..\..\reference-notes\**\*.md" Link="reference-notes\%(RecursiveDir)%(Filename)%(Extension)" CopyToOutputDirectory="PreserveNewest" />
   </ItemGroup>
 
   <ItemGroup>

@@ -57,6 +57,10 @@ public class NormyxDbContext(DbContextOptions<NormyxDbContext> options) : DbCont
         modelBuilder.Entity<RagChunk>()
             .Property(x => x.Embedding)
             .HasColumnType("real[]");
+        modelBuilder.Entity<RagChunk>()
+            .HasIndex(x => new { x.TenantId, x.SourceType });
+        modelBuilder.Entity<RagChunk>()
+            .HasIndex(x => new { x.TenantId, x.DocumentId });
 
         modelBuilder.Entity<Document>().HasMany(x => x.Excerpts).WithOne(x => x.Document).HasForeignKey(x => x.DocumentId);
         modelBuilder.Entity<EvidenceExcerpt>().HasMany(x => x.EvidenceLinks).WithOne(x => x.EvidenceExcerpt).HasForeignKey(x => x.EvidenceExcerptId);

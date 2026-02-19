@@ -16,5 +16,7 @@ WORKDIR /app
 RUN apt-get update && apt-get install -y curl && rm -rf /var/lib/apt/lists/*
 COPY --from=build /app/publish .
 COPY policy-packs ./policy-packs
+COPY prompts ./prompts
+COPY reference-notes ./reference-notes
 EXPOSE 8080
 ENTRYPOINT ["dotnet", "Normyx.Api.dll"]

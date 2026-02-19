@@ -49,6 +49,8 @@ public static class DocumentEndpoints
         NormyxDbContext dbContext,
         ICurrentUserContext currentUser,
         IObjectStorage objectStorage,
+        IDocumentTextExtractor textExtractor,
+        IRagService ragService,
         CancellationToken cancellationToken)
     {
         var tenantId = TenantContext.RequireTenantId(currentUser);
@@ -61,8 +63,13 @@ public static class DocumentEndpoints
             return Results.BadRequest(new { message = "File is required" });
         }
 
-        await using var stream = file.OpenReadStream();
-        var storageRef = await objectStorage.SaveAsync(file.FileName, file.ContentType, stream, cancellationToken);
+        await using var inputStream = file.OpenReadStream();
+        using var memory = new MemoryStream();
+        await inputStream.CopyToAsync(memory, cancellationToken);
+        var bytes = memory.ToArray();
+        memory.Position = 0;
+
+        var storageRef = await objectStorage.SaveAsync(file.FileName, file.ContentType, memory, cancellationToken);
 
         var tags = form.TryGetValue("tags", out var tagValues)
             ? tagValues.ToString().Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
@@ -83,7 +90,33 @@ public static class DocumentEndpoints
         dbContext.Documents.Add(doc);
         await dbContext.SaveChangesAsync(cancellationToken);
 
-        return Results.Created($"/documents/{doc.Id}", new { doc.Id, doc.FileName, doc.UploadedAt });
+        var extractedText = await textExtractor.ExtractTextAsync(file.FileName, file.ContentType, bytes, cancellationToken);
+        if (!string.IsNullOrWhiteSpace(extractedText))
+        {
+            var excerpt = new EvidenceExcerpt
+            {
+                Id = Guid.NewGuid(),
+                DocumentId = doc.Id,
+                Title = "Auto Extracted Excerpt",
+                Text = extractedText[..Math.Min(1200, extractedText.Length)],
+                PageRef = "auto",
+                CreatedByUserId = userId,
+                CreatedAt = DateTimeOffset.UtcNow
+            };
+
+            dbContext.EvidenceExcerpts.Add(excerpt);
+            await dbContext.SaveChangesAsync(cancellationToken);
+
+            await ragService.IndexTextAsync(
+                tenantId,
+                doc.Id,
+                "Document",
+                extractedText,
+                doc.Tags,
+                cancellationToken);
+        }
+
+        return Results.Created($"/documents/{doc.Id}", new { doc.Id, doc.FileName, doc.UploadedAt, Extracted = !string.IsNullOrWhiteSpace(extractedText) });
     }
 
     private static async Task<IResult> DownloadDocumentAsync(
@@ -113,7 +146,8 @@ public static class DocumentEndpoints
         [FromRoute] Guid documentId,
         [FromBody] CreateExcerptRequest request,
         NormyxDbContext dbContext,
-        ICurrentUserContext currentUser)
+        ICurrentUserContext currentUser,
+        IRagService ragService)
     {
         var tenantId = TenantContext.RequireTenantId(currentUser);
         var userId = TenantContext.RequireUserId(currentUser);
@@ -137,6 +171,14 @@ public static class DocumentEndpoints
 
         dbContext.EvidenceExcerpts.Add(excerpt);
         await dbContext.SaveChangesAsync();
+
+        await ragService.IndexTextAsync(
+            tenantId,
+            documentId,
+            "EvidenceExcerpt",
+            request.Text,
+            ["manual-excerpt"],
+            CancellationToken.None);
 
         return Results.Created($"/documents/{documentId}/excerpts/{excerpt.Id}", excerpt);
     }

@@ -10,6 +10,7 @@ using Normyx.Infrastructure.AI;
 using Normyx.Infrastructure.Auth;
 using Normyx.Infrastructure.Extensions;
 using Normyx.Infrastructure.Persistence;
+using Normyx.Infrastructure.Rag;
 using Normyx.Infrastructure.Storage;
 
 var builder = WebApplication.CreateBuilder(args);
@@ -18,6 +19,8 @@ builder.Services.AddNormyxInfrastructure(builder.Configuration);
 builder.Services.Configure<StorageOptions>(builder.Configuration.GetSection(StorageOptions.SectionName));
 builder.Services.Configure<AiProviderOptions>(builder.Configuration.GetSection(AiProviderOptions.SectionName));
 builder.Services.AddScoped<IObjectStorage, LocalObjectStorage>();
+builder.Services.AddScoped<IDocumentTextExtractor, BasicDocumentTextExtractor>();
+builder.Services.AddScoped<IRagService, RagService>();
 
 builder.Services.AddHttpContextAccessor();
 builder.Services.Configure<JwtOptions>(builder.Configuration.GetSection(JwtOptions.SectionName));
@@ -88,6 +91,8 @@ using (var scope = app.Services.CreateScope())
     var db = scope.ServiceProvider.GetRequiredService<NormyxDbContext>();
     await db.Database.MigrateAsync();
     await SeedData.EnsureSeedAsync(db);
+    var ragService = scope.ServiceProvider.GetRequiredService<IRagService>();
+    await ragService.SeedReferenceNotesAsync();
 }
 
 app.UseAuthentication();
@@ -107,6 +112,7 @@ app.MapAiSystemEndpoints();
 app.MapArchitectureEndpoints();
 app.MapInventoryEndpoints();
 app.MapDocumentEndpoints();
+app.MapEvidenceEndpoints();
 app.MapAuditEndpoints();
 app.MapQuestionnaireEndpoints();
 app.MapAssessmentEndpoints();
