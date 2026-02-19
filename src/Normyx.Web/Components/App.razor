@@ -38,7 +38,14 @@
 
     private Task ReloadWorkspaceAsync()
     {
-        Nav.NavigateTo(Nav.Uri, forceLoad: true);
+        try
+        {
+            Nav.NavigateTo(Nav.Uri, forceLoad: true);
+        }
+        catch (NavigationException)
+        {
+            // Blazor can throw this as a control-flow signal in redirect scenarios.
+        }
         return Task.CompletedTask;
     }
 }

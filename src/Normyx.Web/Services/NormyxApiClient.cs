@@ -195,7 +195,19 @@ public class NormyxApiClient(IHttpClientFactory factory, AuthSession session, IJ
             session.Clear();
         }
 
-        navigationManager.NavigateTo("/login");
+        TryNavigateToLogin();
+    }
+
+    private void TryNavigateToLogin()
+    {
+        try
+        {
+            navigationManager.NavigateTo("/login", replace: true);
+        }
+        catch (NavigationException)
+        {
+            // In server-side redirect scenarios Blazor can throw NavigationException intentionally.
+        }
     }
 
     private static async Task EnsureSuccess(HttpResponseMessage response)
