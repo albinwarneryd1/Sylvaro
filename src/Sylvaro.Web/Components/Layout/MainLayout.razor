@@ -6,7 +6,7 @@
 
 <div class="app-shell">
     <aside class="sidebar-panel">
-        <NavMenu />
+        <NavMenu IsAuthenticated="Session.IsAuthenticated" TenantName="Session.TenantName" />
     </aside>
 
     <main class="main-panel">
@@ -25,14 +25,13 @@
                 @if (Session.IsAuthenticated)
                 {
                     <span class="session-chip">Tenant: @Session.TenantName</span>
-                    <span class="session-chip">User: @Session.Email</span>
                     <span class="session-chip">Role: @PrimaryRole</span>
                     <details class="session-menu">
                         <summary>Session</summary>
                         <div class="session-menu-panel">
+                            <p><strong>User</strong><br />@Session.Email</p>
                             <p><strong>Last login</strong><br />@FormatTimestamp(Session.LastAuthenticatedAt)</p>
                             <p><strong>Expires</strong><br />@FormatTimestamp(Session.RefreshTokenExpiresAt)</p>
-                            <p><strong>Status</strong><br />Active authenticated session</p>
                         </div>
                     </details>
                 }

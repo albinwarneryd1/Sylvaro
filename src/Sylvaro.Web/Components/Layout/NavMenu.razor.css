@@ -1,46 +1,68 @@
 .menu-root {
-    display: flex;
-    flex-direction: column;
+    display: grid;
+    gap: 0.7rem;
     padding: 0.9rem 0.6rem;
-    gap: 0.12rem;
+}
+
+.menu-tenant,
+.menu-section {
+    border: 1px solid var(--border-subtle);
+    background: var(--surface-panel);
+    border-radius: var(--radius-sm);
+    padding: 0.55rem;
+    display: grid;
+    gap: 0.28rem;
 }
 
 .menu-title {
-    margin-top: 0.42rem;
-    margin-bottom: 0.2rem;
-    font-size: 0.64rem;
+    font-size: 0.62rem;
     text-transform: uppercase;
     letter-spacing: 0.16em;
     color: var(--text-muted);
-    padding: 0 0.4rem;
     font-weight: 700;
 }
 
-.auth-title {
-    margin-top: 0.86rem;
+.menu-tenant strong {
+    font-size: 0.82rem;
+    color: var(--text-strong);
+}
+
+.menu-tenant p {
+    margin: 0;
+    font-size: 0.7rem;
+    color: var(--text-muted);
 }
 
 .menu-link {
     color: var(--text-body);
     text-decoration: none;
-    padding: 0.46rem 0.5rem 0.46rem 0.68rem;
+    padding: 0.46rem 0.48rem 0.46rem 0.64rem;
     border-radius: 6px;
-    font-size: 0.79rem;
     border: 1px solid transparent;
     border-left: 2px solid transparent;
     transition: background-color 140ms ease, border-color 140ms ease, color 140ms ease;
+    display: grid;
+    gap: 0.1rem;
+}
+
+.menu-link-title {
+    font-size: 0.76rem;
+    font-weight: 600;
+    color: var(--text-strong);
+}
+
+.menu-link-meta {
+    font-size: 0.67rem;
+    color: var(--text-muted);
 }
 
 .menu-link:hover {
-    background: #ece6dc;
-    color: var(--text-strong);
+    background: #f3eee6;
     border-color: #dfd5c6;
 }
 
 .menu-link.active {
     border-left-color: var(--brand-primary);
-    background: #efe8de;
+    background: #efe7dc;
     border-color: #ddcfbc;
-    color: var(--text-strong);
-    font-weight: 600;
 }

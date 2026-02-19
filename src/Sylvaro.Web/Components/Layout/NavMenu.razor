@@ -1,25 +1,75 @@
-@inject Sylvaro.Web.Services.AuthSession Session
+@using Microsoft.AspNetCore.Components
 
 <nav class="menu-root" aria-label="Primary">
-    @if (Session.IsAuthenticated)
+    @if (IsAuthenticated)
     {
-        <div class="menu-title">Workspace</div>
-        <NavLink class="menu-link" href="/" Match="NavLinkMatch.All">Overview</NavLink>
-        <NavLink class="menu-link" href="/ai-systems">AI Systems</NavLink>
-        <NavLink class="menu-link" href="/regulatory-exposure">Exposure Matrix</NavLink>
-        <NavLink class="menu-link" href="/controls-actions">Controls &amp; Actions</NavLink>
-        <NavLink class="menu-link" href="/evidence-vault">Evidence Vault</NavLink>
-        <NavLink class="menu-link" href="/audit-log">Audit Trail</NavLink>
-        <NavLink class="menu-link" href="/tenant-settings">Tenant Settings</NavLink>
+        <section class="menu-tenant">
+            <span class="menu-title">Tenant</span>
+            <strong>@(string.IsNullOrWhiteSpace(TenantName) ? "Governed Workspace" : TenantName)</strong>
+            <p>Regulatory operations scope is active.</p>
+        </section>
 
-        <div class="menu-title auth-title">Security</div>
-        <NavLink class="menu-link" href="/security-center">Security Center</NavLink>
-        <NavLink class="menu-link" href="/login">Switch Account</NavLink>
+        <section class="menu-section">
+            <span class="menu-title">Workspace</span>
+            <NavLink class="menu-link" href="/" Match="NavLinkMatch.All">
+                <span class="menu-link-title">Executive Overview</span>
+                <span class="menu-link-meta">Board posture and key deltas</span>
+            </NavLink>
+            <NavLink class="menu-link" href="/ai-systems">
+                <span class="menu-link-title">AI Systems Registry</span>
+                <span class="menu-link-meta">System inventory and lifecycle state</span>
+            </NavLink>
+            <NavLink class="menu-link" href="/regulatory-exposure">
+                <span class="menu-link-title">Exposure Matrix</span>
+                <span class="menu-link-meta">Cross-domain risk visibility</span>
+            </NavLink>
+            <NavLink class="menu-link" href="/controls-actions">
+                <span class="menu-link-title">Controls &amp; Actions</span>
+                <span class="menu-link-meta">Obligations, owners, and sign-off</span>
+            </NavLink>
+            <NavLink class="menu-link" href="/evidence-vault">
+                <span class="menu-link-title">Evidence Vault</span>
+                <span class="menu-link-meta">Documents, excerpts, traceability</span>
+            </NavLink>
+            <NavLink class="menu-link" href="/audit-log">
+                <span class="menu-link-title">Audit Trail</span>
+                <span class="menu-link-meta">Immutable event ledger</span>
+            </NavLink>
+            <NavLink class="menu-link" href="/tenant-settings">
+                <span class="menu-link-title">Tenant Governance</span>
+                <span class="menu-link-meta">Users, roles, policy packs</span>
+            </NavLink>
+        </section>
+
+        <section class="menu-section">
+            <span class="menu-title">Security</span>
+            <NavLink class="menu-link" href="/security-center">
+                <span class="menu-link-title">Security Center</span>
+                <span class="menu-link-meta">Sessions, tokens, access policy</span>
+            </NavLink>
+            <NavLink class="menu-link" href="/login">
+                <span class="menu-link-title">Switch Account</span>
+                <span class="menu-link-meta">Authenticate with another identity</span>
+            </NavLink>
+        </section>
     }
     else
     {
-        <div class="menu-title">Access</div>
-        <NavLink class="menu-link" href="/login">Sign In</NavLink>
-        <NavLink class="menu-link" href="/register">Register Tenant</NavLink>
+        <section class="menu-section">
+            <span class="menu-title">Access</span>
+            <NavLink class="menu-link" href="/login">
+                <span class="menu-link-title">Sign In</span>
+                <span class="menu-link-meta">Use your tenant credentials</span>
+            </NavLink>
+            <NavLink class="menu-link" href="/register">
+                <span class="menu-link-title">Register Tenant</span>
+                <span class="menu-link-meta">Create a new governed workspace</span>
+            </NavLink>
+        </section>
     }
 </nav>
+
+@code {
+    [Parameter] public bool IsAuthenticated { get; set; }
+    [Parameter] public string? TenantName { get; set; }
+}
