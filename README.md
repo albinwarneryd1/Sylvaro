@@ -1,18 +1,200 @@
-# Sylvaro
+# 🛡️ SYLVARO
 
-Sylvaro is a compliance operations platform for AI systems with deterministic assessment logic, evidence mapping, human sign-off, RAG-backed context retrieval, and export/webhook workflows.
+**Regulatory Intelligence Infrastructure**
 
-## What is included
+Institutional compliance intelligence for AI Act, GDPR and NIS2 environments.
 
-- `src/Sylvaro.Api` ASP.NET Core API with JWT auth, RBAC, tenant isolation, audit log, policy engine, assessments, findings/actions, evidence map/gaps, JSON+PDF exports, and webhook integrations.
-- `src/Sylvaro.Web` Blazor web app with login/register, dashboard, tenant settings, AI systems, diff view, actions kanban, evidence gaps/search, integration controls, and audit views.
-- `src/Sylvaro.Infrastructure` EF Core/PostgreSQL persistence, seeded demo data, provider-agnostic AI draft layer (Local/OpenAI/Azure-compatible), RAG indexing/search, policy pack evaluation.
-- `policy-packs/` versioned compliance-as-code JSON packs.
-- `prompts/` versioned prompt templates for structured JSON generation.
-- `reference-notes/` built-in compliance reference notes used in RAG.
-- `tests/Sylvaro.Tests` integration and unit tests for tenant isolation, RBAC enforcement, auth hardening, session lifecycle, API token lifecycle, action review workflows, and policy engine cache behavior.
+## Overview
 
-## One command start
+SYLVARO is a governance infrastructure platform designed for regulated organizations operating AI systems within the EU.
+
+It provides:
+
+- Structured AI system inventory
+- Regulatory exposure classification
+- Control coverage tracking
+- Evidence integrity monitoring
+- Immutable audit ledger
+- Executive-ready regulatory reporting
+
+This is not a dashboard.  
+It is a compliance operating system.
+
+## Executive Regulatory Overview
+
+Board-ready oversight across regulatory domains.
+
+Includes:
+
+- Compliance score instrument
+- AI Act risk classification
+- GDPR exposure level
+- NIS2 applicability tracking
+- Control Coverage Engine
+- Evidence Integrity Score
+- Component-Level Regulatory Matrix
+- Governance timeline
+
+## AI System Registry
+
+Structured inventory of all governed AI systems.
+
+Features:
+
+- Lifecycle tracking (Draft / Active)
+- Versioning
+- Scope documentation
+- Direct linkage to exposure matrix
+- Workflow guidance for regulatory completeness
+
+## Regulatory Exposure Matrix
+
+Cross-domain regulatory risk visualization.
+
+Capabilities:
+
+- Component-level exposure classification
+- AI Act / GDPR / Security / Vendor mapping
+- Drilldown risk explanation panel
+- Linked controls and remediation owners
+
+## Regulatory Audit Ledger
+
+Immutable, filterable and export-ready audit event ledger.
+
+Designed for:
+
+- Regulatory inspections
+- Internal audit validation
+- Governance traceability
+- Evidence window reconstruction
+
+Includes:
+
+- Timeline mode
+- Table mode
+- Actor filtering
+- Hash reference tracking
+
+## Security Governance Center
+
+Session management, token lifecycle and authentication hardening.
+
+Features:
+
+- Active session control
+- Token management
+- MFA readiness
+- Password policy enforcement
+- Rate limiting configuration
+- Role & API protection overview
+
+## Core Engines
+
+### Control Coverage Engine
+
+Calculates:
+
+`Coverage % = Controls with Valid Evidence / Total Required Controls`
+
+Domain-level breakdown:
+
+- GDPR
+- Security
+- Operational
+- Vendor
+
+### Evidence Integrity Score
+
+Weighted score based on:
+
+- Evidence freshness
+- Linked findings
+- Artifact completeness
+- Orphan controls
+
+Provides measurable documentation quality.
+
+### Governance Timeline
+
+Chronological event stream of:
+
+- Assessments
+- Risk reclassifications
+- Control sign-offs
+- Evidence uploads
+- System changes
+
+## Architecture (High Level)
+
+```text
+Web UI (Razor / MVC)
+        ↓
+Application Layer (Regulatory Engines)
+        ↓
+Domain Models
+        ↓
+Persistence (SQL)
+        ↓
+Audit Event Store
+```
+
+Designed around:
+
+- Domain-driven separation
+- DTO mapping boundaries
+- Structured logging
+- Correlation IDs
+- Fallback resilience
+
+## Technology Stack
+
+- .NET
+- ASP.NET Core
+- Razor Views
+- SQL Database
+- Structured Logging
+- REST APIs
+
+## Design Philosophy
+
+SYLVARO is built around:
+
+- Institutional clarity
+- Regulatory defensibility
+- Audit traceability
+- Deterministic control logic
+- Minimal but authoritative interface design
+
+No neon dashboards.  
+No marketing fluff.  
+Just governance infrastructure.
+
+## Product Screens
+
+### Access Authentication
+
+![Access Authentication Login](docs/screenshots/access-authentication-login.png)
+
+### Executive Regulatory Overview
+
+![Executive Overview Regulatory Posture Summary](docs/screenshots/executive-overview-regulatory-posture-summary.png)
+
+![Executive Overview Regulatory Exposure Matrix Drilldown](docs/screenshots/executive-overview-regulatory-exposure-matrix-drilldown.png)
+
+### AI System Registry
+
+![AI Systems Registry](docs/screenshots/ai-systems-registry.png)
+
+### Regulatory Audit Ledger
+
+![Regulatory Audit Ledger](docs/screenshots/regulatory-audit-ledger.png)
+
+### Security Governance Center
+
+![Security Governance Center](docs/screenshots/security-governance-center.png)
+
+## Run SYLVARO
 
 ```bash
 cp .env.example .env
@@ -23,100 +205,38 @@ After startup:
 
 - Web UI: [http://localhost:8080](http://localhost:8080)
 - API Swagger: [http://localhost:8081/swagger](http://localhost:8081/swagger)
-- MinIO console: [http://localhost:9001](http://localhost:9001)
 
-## Demo credentials (seeded)
+Demo credentials:
 
 - Tenant: `NordicFin AB`
 - Email: `admin@nordicfin.example`
 - Password: `ChangeMe123!`
 
-## Happy path demo
+## Roadmap
 
-1. Login in the web app with seeded credentials.
-2. Open `AI Systems` and enter `LoanAssist`.
-3. Add/update architecture components, data flows, data stores, and questionnaire answers.
-4. Click `Run Assessment`.
-5. Review generated findings/actions.
-6. Add evidence excerpts and link them to actions/findings.
-7. Review actions as `Approved` / `NeedsEdits` / `Rejected` through API or UI flow.
-8. Configure Jira/Azure webhook stubs in `Tenant Settings` (optional).
-9. Generate `DPIA_Draft` export as PDF or JSON (optionally send webhook).
-10. Open `Audit Log` and `Evidence Gaps` to verify traceability.
+Planned enhancements:
 
-## Local dev (without Docker)
+- AI Risk Simulator
+- Board-ready PDF export engine
+- Control gap remediation workflow automation
+- Evidence aging alerts
+- Multi-tenant compliance benchmarking
+- Policy pack version management
 
-```bash
-dotnet restore
-dotnet build Sylvaro.slnx
-dotnet test Sylvaro.slnx
-```
+## Why SYLVARO?
 
-Run API:
+Most compliance tools track documents.  
+SYLVARO tracks regulatory posture.
 
-```bash
-dotnet run --project src/Sylvaro.Api/Sylvaro.Api.csproj
-```
+Most dashboards show metrics.  
+SYLVARO shows defensibility.
 
-Run Web:
+## Status
 
-```bash
-dotnet run --project src/Sylvaro.Web/Sylvaro.Web.csproj
-```
+- Early-stage institutional prototype
+- Enterprise architecture direction
+- Governance-first design
 
-## Key endpoints
+## License
 
-- Auth: `/auth/login`, `/auth/register`, `/auth/refresh`, `/auth/logout`
-- Tenant/users: `/tenants/me` (GET/PUT), `/tenants/roles`, `/tenants/users`
-- AI systems/versions: `/aisystems`, `/aisystems/{id}/versions`
-- Architecture: `/versions/{versionId}/architecture`, `/versions/{versionId}/architecture/components`, `/versions/{versionId}/architecture/flows`, `/versions/{versionId}/architecture/stores`
-- Inventory: `/versions/{versionId}/inventory`
-- Evidence: `/documents`, `/documents/upload`, `/documents/{id}/download`, `/documents/{id}/excerpts`, `/documents/evidence-links`
-- Evidence map/gaps/search: `/versions/{versionId}/evidence/map`, `/versions/{versionId}/evidence/gaps`, `/versions/{versionId}/evidence/search`
-- Assessments: `/versions/{versionId}/assessments/run`
-- Assessment diff: `/versions/{versionId}/assessments/diff/{otherVersionId}`
-- Findings: `/findings/assessment/{assessmentId}`
-- Actions: `/actions/version/{versionId}`, `/actions/board/{versionId}`, `/actions/{actionId}/approve`, `/actions/{actionId}/reviews`
-- Exports: `/exports/versions/{versionId}/generate`, `/exports/versions/{versionId}`, `/exports/{artifactId}/download`
-- Integrations: `/integrations/webhooks`, `/integrations/webhooks/{provider}`
-- Tenant policy packs: `/tenants/policy-packs`, `/tenants/policy-packs/{policyPackId}/enabled`
-- Security: `/security/sessions`, `/security/sessions/revoke-others`, `/security/api-tokens`
-- Audit: `/audit`, `/audit/export`
-
-## Enterprise UI Theme
-
-The platform now ships with a light institutional design system aimed at governance workflows:
-
-- Warm off-white background with white and stone surfaces
-- Bronze accent usage limited to interaction and emphasis
-- Compact 12-column dashboard density for executive review
-- Institutional error surfaces with correlation IDs and collapsible technical details
-- Sticky table headers and dense row formatting for audit and registry views
-
-Related files:
-
-- `src/Sylvaro.Web/wwwroot/app.css`
-- `src/Sylvaro.Web/Components/Layout/MainLayout.razor`
-- `src/Sylvaro.Web/Components/Layout/NavMenu.razor`
-- `src/Sylvaro.Web/Components/Shared/InstitutionalAlert.razor`
-- `docs/sylvaro-design-system.md`
-
-## Screenshot Checklist
-
-Capture these pages after running Docker for visual QA and release notes:
-
-1. `/login` (premium auth layout and brand panel)
-2. `/` (Executive Overview with metric strip, compliance instrument, matrix, governance status)
-3. `/ai-systems` (registry table with search and status filters)
-4. `/audit-log` (table mode with action, actor, and date filters)
-5. `/evidence-vault` (evidence inventory table)
-## Troubleshooting
-
-- If `docker compose up --build` fails with `Cannot connect to the Docker daemon`, start Docker Desktop and wait until it shows as running, then rerun compose.
-- If the UI shows `Authentication required` after refresh, sign in again once to repopulate session storage. The app now auto-recovers access tokens and redirects to login only when refresh is no longer recoverable.
-
-## Compliance-as-code and AI schemas
-
-- Policy pack format: `docs/policy-pack-format.md`
-- AI output JSON schemas: `docs/ai-json-schemas.md`
-- Runbook: `docs/runbook.md`
+Private — Internal / Development use only.
