@@ -5,26 +5,98 @@ using System.Text;
 using System.Text.Json;
 using Microsoft.AspNetCore.Components;
 using Microsoft.AspNetCore.Components.Forms;
+using Microsoft.Extensions.Logging;
 using Microsoft.JSInterop;
 
 namespace Sylvaro.Web.Services;
 
-public class SylvaroApiClient(IHttpClientFactory factory, AuthSession session, IJSRuntime jsRuntime, NavigationManager navigationManager)
+public class SylvaroApiClient(
+    IHttpClientFactory factory,
+    AuthSession session,
+    IJSRuntime jsRuntime,
+    NavigationManager navigationManager,
+    ILogger<SylvaroApiClient> logger)
 {
     private static readonly JsonSerializerOptions JsonOptions = new()
     {
         PropertyNameCaseInsensitive = true
     };
+
     private readonly SemaphoreSlim _refreshLock = new(1, 1);
 
     private HttpClient Client => factory.CreateClient("SylvaroApi");
 
+    public string? LastCorrelationId { get; private set; }
+
     public async Task<T?> GetAsync<T>(string path, bool withAuth = true, CancellationToken cancellationToken = default)
     {
         using var response = await SendWithAuthRetryAsync(() => new HttpRequestMessage(HttpMethod.Get, path), withAuth, cancellationToken);
-        await EnsureSuccess(response);
+        await EnsureSuccess(response, cancellationToken);
 
         return await response.Content.ReadFromJsonAsync<T>(JsonOptions, cancellationToken);
+    }
+
+    public async Task<JsonDocument?> GetJsonDocumentAsync(string path, bool withAuth = true, CancellationToken cancellationToken = default)
+    {
+        using var response = await SendWithAuthRetryAsync(() => new HttpRequestMessage(HttpMethod.Get, path), withAuth, cancellationToken);
+        await EnsureSuccess(response, cancellationToken);
+
+        await using var stream = await response.Content.ReadAsStreamAsync(cancellationToken);
+        if (stream == Stream.Null)
+        {
+            return null;
+        }
+
+        return await JsonDocument.ParseAsync(stream, cancellationToken: cancellationToken);
+    }
+
+    public async Task<List<T>> GetResilientListAsync<T>(
+        string path,
+        Func<JsonElement, T?> map,
+        bool withAuth = true,
+        CancellationToken cancellationToken = default)
+    {
+        using var response = await SendWithAuthRetryAsync(() => new HttpRequestMessage(HttpMethod.Get, path), withAuth, cancellationToken);
+        await EnsureSuccess(response, cancellationToken);
+
+        await using var stream = await response.Content.ReadAsStreamAsync(cancellationToken);
+        if (stream == Stream.Null)
+        {
+            return [];
+        }
+
+        using var doc = await JsonDocument.ParseAsync(stream, cancellationToken: cancellationToken);
+        if (doc.RootElement.ValueKind != JsonValueKind.Array)
+        {
+            throw new JsonException($"Expected JSON array response for {path}.");
+        }
+
+        var items = new List<T>();
+        var index = 0;
+        foreach (var element in doc.RootElement.EnumerateArray())
+        {
+            try
+            {
+                var mapped = map(element);
+                if (mapped is not null)
+                {
+                    items.Add(mapped);
+                }
+            }
+            catch (Exception ex)
+            {
+                logger.LogWarning(
+                    ex,
+                    "Skipped malformed record in {Path}. Index={Index}, CorrelationId={CorrelationId}",
+                    path,
+                    index,
+                    LastCorrelationId ?? "Unavailable");
+            }
+
+            index++;
+        }
+
+        return items;
     }
 
     public async Task<T?> PostAsync<T>(string path, object payload, bool withAuth = true, CancellationToken cancellationToken = default)
@@ -33,7 +105,7 @@ public class SylvaroApiClient(IHttpClientFactory factory, AuthSession session, I
             () => new HttpRequestMessage(HttpMethod.Post, path) { Content = BuildJsonContent(payload) },
             withAuth,
             cancellationToken);
-        await EnsureSuccess(response);
+        await EnsureSuccess(response, cancellationToken);
 
         if (response.Content.Headers.ContentLength is 0)
         {
@@ -49,7 +121,7 @@ public class SylvaroApiClient(IHttpClientFactory factory, AuthSession session, I
             () => new HttpRequestMessage(HttpMethod.Post, path) { Content = BuildJsonContent(payload) },
             withAuth,
             cancellationToken);
-        await EnsureSuccess(response);
+        await EnsureSuccess(response, cancellationToken);
     }
 
     public async Task PutAsync(string path, object payload, bool withAuth = true, CancellationToken cancellationToken = default)
@@ -58,13 +130,13 @@ public class SylvaroApiClient(IHttpClientFactory factory, AuthSession session, I
             () => new HttpRequestMessage(HttpMethod.Put, path) { Content = BuildJsonContent(payload) },
             withAuth,
             cancellationToken);
-        await EnsureSuccess(response);
+        await EnsureSuccess(response, cancellationToken);
     }
 
     public async Task DeleteAsync(string path, bool withAuth = true, CancellationToken cancellationToken = default)
     {
         using var response = await SendWithAuthRetryAsync(() => new HttpRequestMessage(HttpMethod.Delete, path), withAuth, cancellationToken);
-        await EnsureSuccess(response);
+        await EnsureSuccess(response, cancellationToken);
     }
 
     public async Task<T?> UploadFileAsync<T>(string path, IBrowserFile file, string? tags = null, CancellationToken cancellationToken = default)
@@ -83,7 +155,7 @@ public class SylvaroApiClient(IHttpClientFactory factory, AuthSession session, I
 
             return new HttpRequestMessage(HttpMethod.Post, path) { Content = form };
         }, withAuth: true, cancellationToken);
-        await EnsureSuccess(response);
+        await EnsureSuccess(response, cancellationToken);
 
         return await response.Content.ReadFromJsonAsync<T>(JsonOptions, cancellationToken);
     }
@@ -134,7 +206,9 @@ public class SylvaroApiClient(IHttpClientFactory factory, AuthSession session, I
     {
         using var request = requestFactory();
         AddAuthHeader(request, withAuth);
-        return await Client.SendAsync(request, cancellationToken);
+        var response = await Client.SendAsync(request, cancellationToken);
+        LastCorrelationId = ExtractCorrelationId(response, null) ?? LastCorrelationId;
+        return response;
     }
 
     private async Task<RefreshSessionResult> TryRefreshSessionAsync(CancellationToken cancellationToken)
@@ -168,6 +242,7 @@ public class SylvaroApiClient(IHttpClientFactory factory, AuthSession session, I
                 };
 
                 using var refreshResponse = await Client.SendAsync(refreshRequest, cancellationToken);
+                LastCorrelationId = ExtractCorrelationId(refreshResponse, null) ?? LastCorrelationId;
                 if (!refreshResponse.IsSuccessStatusCode)
                 {
                     if (refreshResponse.StatusCode is HttpStatusCode.Unauthorized or HttpStatusCode.Forbidden)
@@ -235,19 +310,45 @@ public class SylvaroApiClient(IHttpClientFactory factory, AuthSession session, I
         }
     }
 
-    private static async Task EnsureSuccess(HttpResponseMessage response)
+    private async Task EnsureSuccess(HttpResponseMessage response, CancellationToken cancellationToken)
     {
         if (response.IsSuccessStatusCode)
         {
+            LastCorrelationId = ExtractCorrelationId(response, null) ?? LastCorrelationId;
             return;
         }
 
-        var body = await response.Content.ReadAsStringAsync();
+        var body = await response.Content.ReadAsStringAsync(cancellationToken);
         var parsed = TryExtractApiError(body);
-        var errorMessage = string.IsNullOrWhiteSpace(parsed.CorrelationId)
-            ? parsed.Message
-            : $"{parsed.Message} (corr:{parsed.CorrelationId})";
+        var correlationId = ExtractCorrelationId(response, parsed.CorrelationId) ?? parsed.CorrelationId;
+        LastCorrelationId = correlationId ?? LastCorrelationId;
+
+        var errorMessage = BuildErrorMessage(parsed.Message, correlationId);
         throw new HttpRequestException($"API call failed ({(int)response.StatusCode}): {errorMessage}");
+    }
+
+    private static string BuildErrorMessage(string message, string? correlationId)
+    {
+        if (string.IsNullOrWhiteSpace(correlationId))
+        {
+            return message;
+        }
+
+        return $"{message} (Correlation ID: {correlationId})";
+    }
+
+    private static string? ExtractCorrelationId(HttpResponseMessage response, string? fallback)
+    {
+        if (response.Headers.TryGetValues("X-Correlation-ID", out var values))
+        {
+            var correlation = values.FirstOrDefault();
+            if (!string.IsNullOrWhiteSpace(correlation))
+            {
+                return correlation;
+            }
+        }
+
+        return string.IsNullOrWhiteSpace(fallback) ? null : fallback;
     }
 
     private static ApiErrorParse TryExtractApiError(string body)

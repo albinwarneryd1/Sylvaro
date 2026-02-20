@@ -26,6 +26,7 @@
 @code {
     [Parameter] public string? ErrorText { get; set; }
     [Parameter] public string? FriendlyMessage { get; set; }
+    [Parameter] public string? CorrelationId { get; set; }
     [Parameter] public string RetryLabel { get; set; } = "Retry operation";
     [Parameter] public string Severity { get; set; } = "error";
     [Parameter] public EventCallback OnRetry { get; set; }
@@ -99,6 +100,11 @@
     {
         get
         {
+            if (!string.IsNullOrWhiteSpace(CorrelationId))
+            {
+                return CorrelationId;
+            }
+
             if (string.IsNullOrWhiteSpace(ErrorText))
             {
                 return "Unavailable";

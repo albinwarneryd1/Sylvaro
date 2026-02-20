@@ -1,4 +1,5 @@
 @page "/"
+@using System.Text.Json
 @inject Sylvaro.Web.Services.SylvaroApiClient Api
 @inject Sylvaro.Web.Services.AuthSession Session
 @inject ILogger<Home> Logger
@@ -46,7 +47,7 @@ else
 
         @if (!string.IsNullOrWhiteSpace(_error))
         {
-            <InstitutionalAlert ErrorText="@_error" FriendlyMessage="Executive overview processing failed." OnRetry="LoadOverviewAsync" />
+            <InstitutionalAlert ErrorText="@_error" CorrelationId="@_errorCorrelationId" FriendlyMessage="Executive overview processing failed." OnRetry="LoadOverviewAsync" />
         }
 
         <OperationalGuide
@@ -54,6 +55,7 @@ else
             Summary="Follow this sequence to move from inventory to audit-ready reporting."
             Steps="@GuideSteps"
             Actions="@GuideActions" />
+
         @if (!string.IsNullOrWhiteSpace(_exportMessage))
         {
             <div class="risk-pill success">@_exportMessage</div>
@@ -101,13 +103,29 @@ else
                     </div>
                     <div class="score-meter"><i style="@($"width:{ComplianceScore}%")"></i></div>
                 </div>
-                <div class="posture-grid">
+                <div class="posture-grid posture-grid-3">
                     <article class="posture-item">
                         <header>
-                            <span class="metric-label">Control Coverage</span>
+                            <span class="metric-label">Control Coverage Engine</span>
                             <span class="delta @DeltaClass(ControlCoverageDelta)">@DeltaLabel(ControlCoverageDelta)</span>
                         </header>
                         <strong>@ControlCoveragePercent%</strong>
+                        <div class="coverage-stack">
+                            @foreach (var domain in _domainCoverage)
+                            {
+                                <div class="coverage-row">
+                                    <span>@domain.Domain</span>
+                                    <strong>@domain.CoveragePercent%</strong>
+                                </div>
+                            }
+                        </div>
+                    </article>
+                    <article class="posture-item">
+                        <header>
+                            <span class="metric-label">Evidence Integrity Score</span>
+                        </header>
+                        <strong>@EvidenceIntegrityScore%</strong>
+                        <span class="context-text">Freshness @EvidenceFreshnessScore% | Findings linked @FindingEvidenceScore% | Artifact completeness @ArtifactCompletenessScore%</span>
                     </article>
                     <article class="posture-item">
                         <header>
@@ -141,56 +159,82 @@ else
             <section class="card-shell panel-span-8">
                 <span class="section-label">Regulatory Exposure Matrix</span>
                 <h2>Component-Level Regulatory Matrix</h2>
-                <table class="matrix-table">
-                    <thead>
-                        <tr>
-                            <th>Component</th>
-                            <th>AI Act</th>
-                            <th>GDPR</th>
-                            <th>Security</th>
-                            <th>Vendor</th>
-                            <th>Operational</th>
-                        </tr>
-                    </thead>
-                    <tbody>
-                        @foreach (var row in _componentRiskRows)
+                <div class="matrix-workbench">
+                    <div class="matrix-table-wrap">
+                        <table class="matrix-table">
+                            <thead>
+                                <tr>
+                                    <th>Component</th>
+                                    <th>AI Act</th>
+                                    <th>GDPR</th>
+                                    <th>Security</th>
+                                    <th>Vendor</th>
+                                    <th>Operational</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                @foreach (var row in _componentRiskRows)
+                                {
+                                    <tr>
+                                        <td>@row.Component</td>
+                                        <td>
+                                            <button type="button" class="matrix-cell matrix-btn @ToSeverityClass(row.AiAct.Severity)" title="@row.AiAct.Reasoning" @onclick='() => SelectMatrixCell(row.Component, "AI Act", row.AiAct)'>
+                                                <span>@row.AiAct.Severity</span>
+                                                <small>@row.AiAct.EvidenceStatus</small>
+                                                <div class="matrix-hint">Severity reasoning: @row.AiAct.Reasoning</div>
+                                            </button>
+                                        </td>
+                                        <td>
+                                            <button type="button" class="matrix-cell matrix-btn @ToSeverityClass(row.Gdpr.Severity)" title="@row.Gdpr.Reasoning" @onclick='() => SelectMatrixCell(row.Component, "GDPR", row.Gdpr)'>
+                                                <span>@row.Gdpr.Severity</span>
+                                                <small>@row.Gdpr.EvidenceStatus</small>
+                                                <div class="matrix-hint">Severity reasoning: @row.Gdpr.Reasoning</div>
+                                            </button>
+                                        </td>
+                                        <td>
+                                            <button type="button" class="matrix-cell matrix-btn @ToSeverityClass(row.Security.Severity)" title="@row.Security.Reasoning" @onclick='() => SelectMatrixCell(row.Component, "Security", row.Security)'>
+                                                <span>@row.Security.Severity</span>
+                                                <small>@row.Security.EvidenceStatus</small>
+                                                <div class="matrix-hint">Severity reasoning: @row.Security.Reasoning</div>
+                                            </button>
+                                        </td>
+                                        <td>
+                                            <button type="button" class="matrix-cell matrix-btn @ToSeverityClass(row.Vendor.Severity)" title="@row.Vendor.Reasoning" @onclick='() => SelectMatrixCell(row.Component, "Vendor", row.Vendor)'>
+                                                <span>@row.Vendor.Severity</span>
+                                                <small>@row.Vendor.EvidenceStatus</small>
+                                                <div class="matrix-hint">Severity reasoning: @row.Vendor.Reasoning</div>
+                                            </button>
+                                        </td>
+                                        <td>
+                                            <button type="button" class="matrix-cell matrix-btn @ToSeverityClass(row.Operational.Severity)" title="@row.Operational.Reasoning" @onclick='() => SelectMatrixCell(row.Component, "Operational", row.Operational)'>
+                                                <span>@row.Operational.Severity</span>
+                                                <small>@row.Operational.EvidenceStatus</small>
+                                                <div class="matrix-hint">Severity reasoning: @row.Operational.Reasoning</div>
+                                            </button>
+                                        </td>
+                                    </tr>
+                                }
+                            </tbody>
+                        </table>
+                    </div>
+
+                    <aside class="matrix-detail">
+                        @if (_selectedMatrixCell is null)
                         {
-                            <tr>
-                                <td>@row.Component</td>
-                                <td>
-                                    <div class="matrix-cell @ToSeverityClass(row.AiAct.Severity)">
-                                        <span>@row.AiAct.Severity</span>
-                                        <div class="matrix-hint">Issue: @row.AiAct.Issue<br />Control: @row.AiAct.Control<br />Evidence: @row.AiAct.EvidenceStatus</div>
-                                    </div>
-                                </td>
-                                <td>
-                                    <div class="matrix-cell @ToSeverityClass(row.Gdpr.Severity)">
-                                        <span>@row.Gdpr.Severity</span>
-                                        <div class="matrix-hint">Issue: @row.Gdpr.Issue<br />Control: @row.Gdpr.Control<br />Evidence: @row.Gdpr.EvidenceStatus</div>
-                                    </div>
-                                </td>
-                                <td>
-                                    <div class="matrix-cell @ToSeverityClass(row.Security.Severity)">
-                                        <span>@row.Security.Severity</span>
-                                        <div class="matrix-hint">Issue: @row.Security.Issue<br />Control: @row.Security.Control<br />Evidence: @row.Security.EvidenceStatus</div>
-                                    </div>
-                                </td>
-                                <td>
-                                    <div class="matrix-cell @ToSeverityClass(row.Vendor.Severity)">
-                                        <span>@row.Vendor.Severity</span>
-                                        <div class="matrix-hint">Issue: @row.Vendor.Issue<br />Control: @row.Vendor.Control<br />Evidence: @row.Vendor.EvidenceStatus</div>
-                                    </div>
-                                </td>
-                                <td>
-                                    <div class="matrix-cell @ToSeverityClass(row.Operational.Severity)">
-                                        <span>@row.Operational.Severity</span>
-                                        <div class="matrix-hint">Issue: @row.Operational.Issue<br />Control: @row.Operational.Control<br />Evidence: @row.Operational.EvidenceStatus</div>
-                                    </div>
-                                </td>
-                            </tr>
+                            <p class="context-text">Select a matrix cell to inspect risk rationale, control linkage, evidence coverage and remediation ownership.</p>
                         }
-                    </tbody>
-                </table>
+                        else
+                        {
+                            <span class="section-label">Risk Drilldown</span>
+                            <h3>@_selectedMatrixCell.Component · @_selectedMatrixCell.Domain</h3>
+                            <p><strong>Identified risk:</strong> @_selectedMatrixCell.Cell.Issue</p>
+                            <p><strong>Linked control:</strong> @_selectedMatrixCell.Cell.Control</p>
+                            <p><strong>Evidence coverage:</strong> @_selectedMatrixCell.Cell.EvidenceStatus</p>
+                            <p><strong>Remediation owner:</strong> @_selectedMatrixCell.Cell.OwnerRole</p>
+                            <p class="context-text">Reasoning: @_selectedMatrixCell.Cell.Reasoning</p>
+                        }
+                    </aside>
+                </div>
             </section>
 
             <section class="card-shell panel-span-12">
@@ -223,6 +267,30 @@ else
                     </article>
                 </div>
             </section>
+
+            <section class="card-shell panel-span-12">
+                <span class="section-label">Audit Timeline</span>
+                <h2>Critical Governance Events</h2>
+                <div class="audit-timeline">
+                    @if (_auditTimeline.Count == 0)
+                    {
+                        <p class="context-text">No recent audit events available.</p>
+                    }
+                    else
+                    {
+                        @foreach (var log in _auditTimeline)
+                        {
+                            <article class="audit-event">
+                                <span class="audit-dot"></span>
+                                <div>
+                                    <strong>@log.ActionType</strong>
+                                    <p class="context-text">@log.TargetType · @log.Timestamp.UtcDateTime.ToString("yyyy-MM-dd HH:mm:ss 'UTC'")</p>
+                                </div>
+                            </article>
+                        }
+                    }
+                </div>
+            </section>
         </div>
     </div>
 }
@@ -233,23 +301,31 @@ else
     private bool _attemptedInitialLoad;
     private string _error = string.Empty;
     private string _exportMessage = string.Empty;
+    private string? _errorCorrelationId;
 
     private Sylvaro.Web.Models.DashboardTenantDto? _dashboard;
     private Sylvaro.Web.Models.DashboardSystemDto? _systemDashboard;
     private Sylvaro.Web.Models.AuditLogDto? _latestAudit;
+    private List<Sylvaro.Web.Models.AuditLogDto> _auditTimeline = [];
     private List<Sylvaro.Web.Models.AiSystemListItem> _systems = [];
     private List<Sylvaro.Web.Models.VersionSummaryDto> _versions = [];
     private List<Sylvaro.Web.Models.AssessmentListItem> _assessments = [];
     private List<Sylvaro.Web.Models.ActionItemDto> _actions = [];
     private List<Sylvaro.Web.Models.FindingDto> _latestFindings = [];
+    private List<Sylvaro.Web.Models.DocumentListItemDto> _documents = [];
     private Sylvaro.Web.Models.InventoryResponse _inventory = new([], []);
+    private Sylvaro.Web.Models.EvidenceMapResponse _evidenceMap = new([], [], []);
+    private Sylvaro.Web.Models.EvidenceGapsResponse _evidenceGaps = new(0, [], []);
     private List<ComponentRiskRow> _componentRiskRows = [];
+    private List<DomainCoverage> _domainCoverage = [];
+    private MatrixDrillDown? _selectedMatrixCell;
 
     private int _vendorOutsideEu;
     private string _latestVersionLabel = "N/A";
     private string _latestSignoff = "Pending";
     private string _systemLifecycleStatus = "Unknown";
     private Guid? _latestVersionId;
+
     private readonly string[] GuideSteps =
     [
         "Register or update the AI system inventory.",
@@ -267,6 +343,7 @@ else
     ];
 
     private int ComplianceScore => _systemDashboard?.ScoreTrend.OrderBy(x => x.RanAt).LastOrDefault()?.Score ?? 0;
+
     private int ScoreDelta
         => _systemDashboard?.ScoreTrend is { Count: > 1 }
             ? _systemDashboard.ScoreTrend.OrderBy(x => x.RanAt).TakeLast(2).Last().Score - _systemDashboard.ScoreTrend.OrderBy(x => x.RanAt).TakeLast(2).First().Score
@@ -275,26 +352,28 @@ else
     private int OutstandingActions => _dashboard?.OpenActions ?? 0;
     private int OpenCriticalActions => _actions.Count(a => a.Priority.Equals("Critical", StringComparison.OrdinalIgnoreCase));
     private int RiskTotal => RiskBreakdown.Sum(x => x.Count);
-    private int ControlCoveragePercent => _actions.Count == 0
-        ? 0
-        : (int)Math.Round(100d * _actions.Count(a => a.Status.Equals("Done", StringComparison.OrdinalIgnoreCase)) / _actions.Count);
+    private int TotalControlsRequired => _domainCoverage.Sum(x => x.TotalControls);
+    private int TotalControlsWithEvidence => _domainCoverage.Sum(x => x.ControlsWithEvidence);
+    private int ControlCoveragePercent => TotalControlsRequired == 0 ? 0 : (int)Math.Round(100d * TotalControlsWithEvidence / TotalControlsRequired);
     private int ControlCoverageDelta => Math.Clamp(ScoreDelta / 3, -3, 3);
     private int ObligationsDelta => Math.Clamp(ScoreDelta == 0 ? 0 : -Math.Sign(ScoreDelta), -2, 2);
     private int CriticalDeficiencyDelta => Math.Clamp(ScoreDelta == 0 ? 0 : -Math.Sign(ScoreDelta), -2, 2);
+
     private int OverdueRemediationCount => _actions.Count(a =>
         a.DueDate.HasValue &&
         a.DueDate.Value < DateTimeOffset.UtcNow &&
         !a.Status.Equals("Done", StringComparison.OrdinalIgnoreCase));
+
     private int OverdueDelta => OverdueRemediationCount == 0 ? -1 : 1;
-    private int EvidenceGapCount => _latestFindings.Count(f =>
-        f.Severity.Equals("Critical", StringComparison.OrdinalIgnoreCase) ||
-        f.Severity.Equals("High", StringComparison.OrdinalIgnoreCase));
+    private int EvidenceGapCount => _evidenceGaps.TotalGaps;
     private int EvidenceGapDelta => EvidenceGapCount == 0 ? -1 : 1;
     private int HighPriorityActionCount => _actions.Count(a =>
         a.Priority.Equals("Critical", StringComparison.OrdinalIgnoreCase) ||
         a.Priority.Equals("High", StringComparison.OrdinalIgnoreCase));
+
     private int MediumPriorityActionCount => _actions.Count(a =>
         a.Priority.Equals("Medium", StringComparison.OrdinalIgnoreCase));
+
     private int LowPriorityActionCount => _actions.Count(a =>
         a.Priority.Equals("Low", StringComparison.OrdinalIgnoreCase));
 
@@ -312,6 +391,54 @@ else
     private int AiActDelta => Math.Clamp(-Math.Sign(ScoreDelta), -2, 2);
     private int GdprDelta => ObligationsDelta;
     private int Nis2Delta => _vendorOutsideEu > 0 ? 1 : 0;
+
+    private int EvidenceFreshnessScore
+    {
+        get
+        {
+            if (_documents.Count == 0)
+            {
+                return 40;
+            }
+
+            var fresh = _documents.Count(d => d.UploadedAt >= DateTimeOffset.UtcNow.AddDays(-180));
+            return (int)Math.Round(100d * fresh / _documents.Count);
+        }
+    }
+
+    private int FindingEvidenceScore
+    {
+        get
+        {
+            if (_latestFindings.Count == 0)
+            {
+                return 100;
+            }
+
+            var linked = _evidenceMap.Findings.Count(f => f.Evidence.Count > 0);
+            return (int)Math.Round(100d * linked / _latestFindings.Count);
+        }
+    }
+
+    private int ArtifactCompletenessScore
+    {
+        get
+        {
+            var required = _actions.Count + Math.Max(1, TotalControlsRequired);
+            if (required <= 0)
+            {
+                return 100;
+            }
+
+            var missing = Math.Min(required, _evidenceGaps.TotalGaps);
+            return Math.Max(0, (int)Math.Round(100d * (required - missing) / required));
+        }
+    }
+
+    private int EvidenceIntegrityScore => (int)Math.Round(
+        EvidenceFreshnessScore * 0.30 +
+        FindingEvidenceScore * 0.35 +
+        ArtifactCompletenessScore * 0.35);
 
     private IReadOnlyList<RiskLegendBucket> RiskBreakdown
     {
@@ -381,48 +508,44 @@ else
 
     private async Task LoadOverviewAsync()
     {
+        using var scope = Logger.BeginScope(new Dictionary<string, object>
+        {
+            ["Tenant"] = Session.TenantName,
+            ["User"] = Session.Email,
+            ["CorrelationId"] = Api.LastCorrelationId ?? "Unavailable"
+        });
+
         try
         {
+            _error = string.Empty;
+            _errorCorrelationId = null;
+
+            Logger.LogInformation("Loading executive overview payload.");
             _dashboard = await Api.GetAsync<Sylvaro.Web.Models.DashboardTenantDto>("/dashboard/tenant");
-            _systems = (await Api.GetAsync<List<Sylvaro.Web.Models.AiSystemListItem>>("/aisystems")) ?? [];
-            _latestAudit = (await Api.GetAsync<List<Sylvaro.Web.Models.AuditLogDto>>("/audit?take=1"))?.FirstOrDefault();
+            _systems = await Api.GetResilientListAsync("/aisystems", ParseAiSystemRecord);
+            _auditTimeline = (await Api.GetAsync<List<Sylvaro.Web.Models.AuditLogDto>>("/audit?take=8")) ?? [];
+            _latestAudit = _auditTimeline.FirstOrDefault();
 
             var primarySystem = _systems.OrderByDescending(x => x.UpdatedAt).FirstOrDefault();
             if (primarySystem is null)
             {
+                Logger.LogWarning("Executive overview has no AI systems to evaluate.");
                 return;
             }
 
             _systemLifecycleStatus = Sylvaro.Web.Models.StatusValueNormalizer.NormalizeSystemStatus(primarySystem.Status);
             if (!_systemLifecycleStatus.Equals(primarySystem.Status, StringComparison.OrdinalIgnoreCase))
             {
-                Logger.LogWarning("Unknown AI system status received for dashboard: {Status}", primarySystem.Status);
+                Logger.LogWarning("Unknown AI system status received. RawStatus={RawStatus}", primarySystem.Status);
             }
 
-            try
-            {
-                _systemDashboard = await Api.GetAsync<Sylvaro.Web.Models.DashboardSystemDto>($"/dashboard/system/{primarySystem.Id}");
-                if (_systemDashboard is not null)
-                {
-                    var normalizedSystemDashboardStatus = Sylvaro.Web.Models.StatusValueNormalizer.NormalizeSystemStatus(_systemDashboard.Status);
-                    if (!normalizedSystemDashboardStatus.Equals(_systemDashboard.Status, StringComparison.OrdinalIgnoreCase))
-                    {
-                        Logger.LogWarning("Unknown dashboard system status payload: {Status}", _systemDashboard.Status);
-                        _systemDashboard = _systemDashboard with { Status = normalizedSystemDashboardStatus };
-                    }
-                }
-            }
-            catch (Exception ex) when (ex is System.Text.Json.JsonException or InvalidOperationException)
-            {
-                Logger.LogWarning(ex, "Dashboard system payload parsing mismatch. Falling back to partial tenant dashboard.");
-                _error = "An assessment parsing error occurred. Some system metrics are temporarily unavailable.";
-                _systemDashboard = null;
-            }
+            _systemDashboard = await LoadSystemDashboardResilientAsync(primarySystem);
 
             _versions = (await Api.GetAsync<List<Sylvaro.Web.Models.VersionSummaryDto>>($"/aisystems/{primarySystem.Id}/versions")) ?? [];
             var latestVersion = _versions.OrderByDescending(x => x.VersionNumber).FirstOrDefault();
             if (latestVersion is null)
             {
+                Logger.LogWarning("No versions found for system {SystemId}", primarySystem.Id);
                 return;
             }
 
@@ -431,13 +554,22 @@ else
             _assessments = (await Api.GetAsync<List<Sylvaro.Web.Models.AssessmentListItem>>($"/versions/{latestVersion.Id}/assessments")) ?? [];
             _actions = (await Api.GetAsync<List<Sylvaro.Web.Models.ActionItemDto>>($"/actions/version/{latestVersion.Id}")) ?? [];
             _inventory = await Api.GetAsync<Sylvaro.Web.Models.InventoryResponse>($"/versions/{latestVersion.Id}/inventory") ?? new([], []);
-            var architecture = await Api.GetAsync<Sylvaro.Web.Models.ArchitectureResponse>($"/versions/{latestVersion.Id}/architecture") ?? new([], [], []);
+            _evidenceMap = await Api.GetAsync<Sylvaro.Web.Models.EvidenceMapResponse>($"/versions/{latestVersion.Id}/evidence/map") ?? new([], [], []);
+            _evidenceGaps = await Api.GetAsync<Sylvaro.Web.Models.EvidenceGapsResponse>($"/versions/{latestVersion.Id}/evidence/gaps") ?? new(0, [], []);
+            _documents = (await Api.GetAsync<List<Sylvaro.Web.Models.DocumentListItemDto>>("/documents")) ?? [];
 
+            BuildControlCoverageEngine();
+
+            var architecture = await Api.GetAsync<Sylvaro.Web.Models.ArchitectureResponse>($"/versions/{latestVersion.Id}/architecture") ?? new([], [], []);
             _componentRiskRows = architecture.Components
                 .OrderBy(x => x.Name)
                 .Take(12)
                 .Select(component => BuildComponentRiskRow(component, architecture, _inventory))
                 .ToList();
+
+            _selectedMatrixCell = _componentRiskRows.Count > 0
+                ? new MatrixDrillDown(_componentRiskRows[0].Component, "AI Act", _componentRiskRows[0].AiAct)
+                : null;
 
             _vendorOutsideEu = _inventory.Vendors.Count(v => !v.Region.Contains("eu", StringComparison.OrdinalIgnoreCase));
 
@@ -452,10 +584,19 @@ else
             {
                 _latestFindings = (await Api.GetAsync<List<Sylvaro.Web.Models.FindingDto>>($"/findings/assessment/{latestAssessment.Id}")) ?? [];
             }
+
+            Logger.LogInformation(
+                "Executive overview loaded. Systems={SystemCount}, Actions={ActionCount}, Controls={ControlCount}, CorrelationId={CorrelationId}",
+                _systems.Count,
+                _actions.Count,
+                TotalControlsRequired,
+                Api.LastCorrelationId ?? "Unavailable");
         }
         catch (Exception ex)
         {
             _error = ex.Message;
+            _errorCorrelationId = Api.LastCorrelationId;
+            Logger.LogError(ex, "Executive overview load failed. CorrelationId={CorrelationId}", _errorCorrelationId ?? "Unavailable");
         }
         finally
         {
@@ -463,48 +604,152 @@ else
         }
     }
 
-    private async Task ExportBoardSummaryAsync()
-        => await GenerateDashboardExportAsync("Board_Summary", "json");
-
-    private async Task ExportRegulatoryReportAsync()
-        => await GenerateDashboardExportAsync("Regulator_Export", "pdf");
-
-    private async Task GenerateDashboardExportAsync(string exportType, string format)
+    private Sylvaro.Web.Models.AiSystemListItem? ParseAiSystemRecord(JsonElement element)
     {
-        if (_latestVersionId is null)
+        var id = GetGuidValue(element, "id");
+        if (id == Guid.Empty)
         {
-            return;
+            return null;
         }
 
+        var rawStatus = GetFlexibleStringValue(element, "status");
+        var status = Sylvaro.Web.Models.StatusValueNormalizer.NormalizeSystemStatus(rawStatus);
+        if (!status.Equals(rawStatus, StringComparison.OrdinalIgnoreCase))
+        {
+            Logger.LogWarning("AI system status fallback applied. SystemId={SystemId}, RawStatus={RawStatus}", id, rawStatus);
+        }
+
+        return new Sylvaro.Web.Models.AiSystemListItem(
+            id,
+            GetFlexibleStringValue(element, "name", "Unnamed system"),
+            GetFlexibleStringValue(element, "description", string.Empty),
+            status,
+            GetDateTimeOffsetValue(element, "createdAt"),
+            GetDateTimeOffsetValue(element, "updatedAt"),
+            GetIntValue(element, "versionCount"));
+    }
+
+    private async Task<Sylvaro.Web.Models.DashboardSystemDto> LoadSystemDashboardResilientAsync(Sylvaro.Web.Models.AiSystemListItem primarySystem)
+    {
         try
         {
-            _exporting = true;
-            _error = string.Empty;
-            _exportMessage = string.Empty;
-
-            var result = await Api.PostAsync<DashboardExportResult>($"/exports/versions/{_latestVersionId.Value}/generate", new
+            var doc = await Api.GetJsonDocumentAsync($"/dashboard/system/{primarySystem.Id}");
+            if (doc is null)
             {
-                exportType,
-                format,
-                sendWebhook = false
-            });
-
-            if (result is null)
-            {
-                _error = "Export generation did not return an artifact reference.";
-                return;
+                Logger.LogWarning("Dashboard system payload was empty for system {SystemId}", primarySystem.Id);
+                return BuildDashboardFallback(primarySystem);
             }
 
-            _exportMessage = $"Generated {result.ExportType} ({result.MimeType}) at {result.CreatedAt:yyyy-MM-dd HH:mm:ss} UTC.";
+            using (doc)
+            {
+                if (doc.RootElement.ValueKind != JsonValueKind.Object)
+                {
+                    Logger.LogWarning("Dashboard system payload was not an object for system {SystemId}", primarySystem.Id);
+                    return BuildDashboardFallback(primarySystem);
+                }
+
+                var root = doc.RootElement;
+                var statusRaw = GetFlexibleStringValue(root, "status", primarySystem.Status);
+                var normalizedStatus = Sylvaro.Web.Models.StatusValueNormalizer.NormalizeSystemStatus(statusRaw);
+                if (!normalizedStatus.Equals(statusRaw, StringComparison.OrdinalIgnoreCase))
+                {
+                    Logger.LogWarning("Dashboard status fallback applied. SystemId={SystemId}, RawStatus={RawStatus}", primarySystem.Id, statusRaw);
+                }
+
+                var trend = ParseScoreTrend(root);
+                return new Sylvaro.Web.Models.DashboardSystemDto(
+                    GetGuidValue(root, "id", primarySystem.Id),
+                    GetFlexibleStringValue(root, "name", primarySystem.Name),
+                    normalizedStatus,
+                    GetIntValue(root, "assessmentsCount"),
+                    trend);
+            }
         }
         catch (Exception ex)
         {
-            _error = ex.Message;
+            Logger.LogWarning(ex, "Dashboard system payload parsing mismatch. Falling back to safe dashboard view. CorrelationId={CorrelationId}", Api.LastCorrelationId ?? "Unavailable");
+            _error = "An assessment parsing error occurred. Some system metrics are temporarily unavailable.";
+            _errorCorrelationId = Api.LastCorrelationId;
+            return BuildDashboardFallback(primarySystem);
         }
-        finally
+    }
+
+    private static List<Sylvaro.Web.Models.DashboardScorePointDto> ParseScoreTrend(JsonElement root)
+    {
+        if (!root.TryGetProperty("scoreTrend", out var trendElement) || trendElement.ValueKind != JsonValueKind.Array)
         {
-            _exporting = false;
+            return [];
         }
+
+        var points = new List<Sylvaro.Web.Models.DashboardScorePointDto>();
+        foreach (var point in trendElement.EnumerateArray())
+        {
+            if (point.ValueKind != JsonValueKind.Object)
+            {
+                continue;
+            }
+
+            var ranAt = GetDateTimeOffsetValue(point, "ranAt");
+            points.Add(new Sylvaro.Web.Models.DashboardScorePointDto(
+                GetGuidValue(point, "id"),
+                ranAt,
+                GetIntValue(point, "score")));
+        }
+
+        return points;
+    }
+
+    private static Sylvaro.Web.Models.DashboardSystemDto BuildDashboardFallback(Sylvaro.Web.Models.AiSystemListItem primarySystem)
+        => new(primarySystem.Id, primarySystem.Name, "Unknown", 0, []);
+
+    private void BuildControlCoverageEngine()
+    {
+        if (_evidenceMap.Controls.Count == 0)
+        {
+            _domainCoverage =
+            [
+                new DomainCoverage("AI Act", 0, 0),
+                new DomainCoverage("GDPR", 0, 0),
+                new DomainCoverage("Security", 0, 0),
+                new DomainCoverage("Operational", 0, 0)
+            ];
+
+            return;
+        }
+
+        _domainCoverage = _evidenceMap.Controls
+            .Select(control => new
+            {
+                Domain = MapControlDomain(control.Title),
+                HasEvidence = control.Evidence.Count > 0
+            })
+            .GroupBy(x => x.Domain)
+            .Select(group => new DomainCoverage(group.Key, group.Count(), group.Count(x => x.HasEvidence)))
+            .OrderBy(x => x.Domain)
+            .ToList();
+    }
+
+    private static string MapControlDomain(string controlKey)
+    {
+        if (controlKey.StartsWith("AI_ACT", StringComparison.OrdinalIgnoreCase))
+        {
+            return "AI Act";
+        }
+
+        if (controlKey.StartsWith("GDPR", StringComparison.OrdinalIgnoreCase))
+        {
+            return "GDPR";
+        }
+
+        if (controlKey.StartsWith("NIS2", StringComparison.OrdinalIgnoreCase) ||
+            controlKey.Contains("SECURITY", StringComparison.OrdinalIgnoreCase) ||
+            controlKey.Contains("ACCESS", StringComparison.OrdinalIgnoreCase) ||
+            controlKey.Contains("LOGGING", StringComparison.OrdinalIgnoreCase))
+        {
+            return "Security";
+        }
+
+        return "Operational";
     }
 
     private static int CountKeys(IReadOnlyDictionary<string, int> distribution, params string[] fragments)
@@ -558,15 +803,18 @@ else
 
         return new ComponentRiskRow(
             component.Name,
-            BuildMatrixCell(aiActSeverity, "Potential high-impact AI obligations identified.", "AI_ACT_HIGH_RISK_CONTROLS", "Policy reference aligned"),
-            BuildMatrixCell(gdprSeverity, "Personal data processing requires lawful basis controls.", "GDPR_LAWFUL_BASIS_REVIEW", hasSensitiveFlow ? "Evidence required" : "Evidence linked"),
-            BuildMatrixCell(securitySeverity, "Attack surface exposure across trust boundaries.", "NIS2_ACCESS_AND_LOGGING_BASELINE", component.IsExternal ? "Partial evidence" : "Evidence linked"),
-            BuildMatrixCell(vendorSeverity, "Third-party dependency and processor risk.", "VENDOR_DPA_AND_REGION_CHECK", inventory.Vendors.Count == 0 ? "Evidence missing" : "Evidence linked"),
-            BuildMatrixCell(operationalSeverity, "Retention and continuity operating controls.", "OPERATIONS_RETENTION_CONTINUITY", operationalSeverity.Equals("Compliant", StringComparison.OrdinalIgnoreCase) ? "Evidence linked" : "Evidence required"));
+            BuildMatrixCell(aiActSeverity, "Potential high-impact AI obligations identified.", "AI_ACT_HIGH_RISK_CONTROLS", "Policy reference aligned", "Model behavior and decision influence require AI Act safeguards.", "Compliance Officer"),
+            BuildMatrixCell(gdprSeverity, "Personal data processing requires lawful basis controls.", "GDPR_LAWFUL_BASIS_REVIEW", hasSensitiveFlow ? "Evidence required" : "Evidence linked", "Sensitive categories or personal data transfer elevates privacy exposure.", "Compliance Officer"),
+            BuildMatrixCell(securitySeverity, "Attack surface exposure across trust boundaries.", "NIS2_ACCESS_AND_LOGGING_BASELINE", component.IsExternal ? "Partial evidence" : "Evidence linked", "External trust boundaries increase identity and telemetry control requirements.", "Security Lead"),
+            BuildMatrixCell(vendorSeverity, "Third-party dependency and processor risk.", "VENDOR_DPA_AND_REGION_CHECK", inventory.Vendors.Count == 0 ? "Evidence missing" : "Evidence linked", "Vendor region and subprocessors determine contractual and transfer obligations.", "Security Lead"),
+            BuildMatrixCell(operationalSeverity, "Retention and continuity operating controls.", "OPERATIONS_RETENTION_CONTINUITY", operationalSeverity.Equals("Compliant", StringComparison.OrdinalIgnoreCase) ? "Evidence linked" : "Evidence required", "Retention periods and continuity readiness drive operational resilience posture.", "Product Owner"));
     }
 
-    private static MatrixCell BuildMatrixCell(string severity, string issue, string control, string evidence)
-        => new(severity, issue, control, evidence);
+    private static MatrixCell BuildMatrixCell(string severity, string issue, string control, string evidence, string reasoning, string ownerRole)
+        => new(severity, issue, control, evidence, reasoning, ownerRole);
+
+    private void SelectMatrixCell(string component, string domain, MatrixCell cell)
+        => _selectedMatrixCell = new MatrixDrillDown(component, domain, cell);
 
     private static string DeltaClass(int value)
         => value switch
@@ -587,12 +835,128 @@ else
     private static string ToSeverityClass(string severity)
         => ToRiskPill(severity);
 
+    private static Guid GetGuidValue(JsonElement element, string propertyName, Guid fallback = default)
+    {
+        if (!element.TryGetProperty(propertyName, out var prop))
+        {
+            return fallback;
+        }
+
+        if (prop.ValueKind == JsonValueKind.String && Guid.TryParse(prop.GetString(), out var parsed))
+        {
+            return parsed;
+        }
+
+        return fallback;
+    }
+
+    private static int GetIntValue(JsonElement element, string propertyName, int fallback = 0)
+    {
+        if (!element.TryGetProperty(propertyName, out var prop))
+        {
+            return fallback;
+        }
+
+        return prop.ValueKind switch
+        {
+            JsonValueKind.Number when prop.TryGetInt32(out var intValue) => intValue,
+            JsonValueKind.String when int.TryParse(prop.GetString(), out var parsed) => parsed,
+            _ => fallback
+        };
+    }
+
+    private static DateTimeOffset GetDateTimeOffsetValue(JsonElement element, string propertyName)
+    {
+        if (!element.TryGetProperty(propertyName, out var prop))
+        {
+            return DateTimeOffset.UtcNow;
+        }
+
+        if (prop.ValueKind == JsonValueKind.String && DateTimeOffset.TryParse(prop.GetString(), out var parsed))
+        {
+            return parsed;
+        }
+
+        return DateTimeOffset.UtcNow;
+    }
+
+    private static string GetFlexibleStringValue(JsonElement element, string propertyName, string fallback = "Unknown")
+    {
+        if (!element.TryGetProperty(propertyName, out var prop))
+        {
+            return fallback;
+        }
+
+        return prop.ValueKind switch
+        {
+            JsonValueKind.String => string.IsNullOrWhiteSpace(prop.GetString()) ? fallback : prop.GetString()!,
+            JsonValueKind.Number => prop.ToString(),
+            JsonValueKind.True => "true",
+            JsonValueKind.False => "false",
+            JsonValueKind.Null => fallback,
+            _ => prop.ToString()
+        };
+    }
+
+    private async Task ExportBoardSummaryAsync()
+        => await GenerateDashboardExportAsync("Board_Summary", "json");
+
+    private async Task ExportRegulatoryReportAsync()
+        => await GenerateDashboardExportAsync("Regulator_Export", "pdf");
+
+    private async Task GenerateDashboardExportAsync(string exportType, string format)
+    {
+        if (_latestVersionId is null)
+        {
+            return;
+        }
+
+        try
+        {
+            _exporting = true;
+            _error = string.Empty;
+            _errorCorrelationId = null;
+            _exportMessage = string.Empty;
+
+            var result = await Api.PostAsync<DashboardExportResult>($"/exports/versions/{_latestVersionId.Value}/generate", new
+            {
+                exportType,
+                format,
+                sendWebhook = false
+            });
+
+            if (result is null)
+            {
+                _error = "Export generation did not return an artifact reference.";
+                _errorCorrelationId = Api.LastCorrelationId;
+                return;
+            }
+
+            _exportMessage = $"Generated {result.ExportType} ({result.MimeType}) at {result.CreatedAt:yyyy-MM-dd HH:mm:ss} UTC.";
+        }
+        catch (Exception ex)
+        {
+            _error = ex.Message;
+            _errorCorrelationId = Api.LastCorrelationId;
+        }
+        finally
+        {
+            _exporting = false;
+        }
+    }
+
     private sealed record RiskLegendBucket(string Label, string CssClass, int Count, string ColorHex)
     {
         public int Percentage { get; init; }
     }
 
-    private sealed record MatrixCell(string Severity, string Issue, string Control, string EvidenceStatus);
+    private sealed record DomainCoverage(string Domain, int TotalControls, int ControlsWithEvidence)
+    {
+        public int CoveragePercent => TotalControls == 0 ? 0 : (int)Math.Round(100d * ControlsWithEvidence / TotalControls);
+    }
+
+    private sealed record MatrixCell(string Severity, string Issue, string Control, string EvidenceStatus, string Reasoning, string OwnerRole);
+    private sealed record MatrixDrillDown(string Component, string Domain, MatrixCell Cell);
     private sealed record ComponentRiskRow(string Component, MatrixCell AiAct, MatrixCell Gdpr, MatrixCell Security, MatrixCell Vendor, MatrixCell Operational);
     private sealed record DashboardExportResult(Guid Id, string ExportType, string MimeType, DateTimeOffset CreatedAt);
 }
