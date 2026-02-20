@@ -1,6 +1,6 @@
+using System.ComponentModel.DataAnnotations;
 using System.Text;
 using System.Text.Json;
-using System.ComponentModel.DataAnnotations;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
@@ -8,6 +8,7 @@ using Sylvaro.Api.Utilities;
 using Sylvaro.Application.Abstractions;
 using Sylvaro.Application.Security;
 using Sylvaro.Domain.Entities;
+using Sylvaro.Domain.Enums;
 using Sylvaro.Infrastructure.Persistence;
 
 namespace Sylvaro.Api.Endpoints;
@@ -66,9 +67,55 @@ public static class ExportEndpoints
             .Where(x => x.AiSystemVersionId == versionId)
             .ToListAsync();
 
+        var findings = latestAssessment is null
+            ? new List<Finding>()
+            : await dbContext.Findings.Where(x => x.AssessmentId == latestAssessment.Id).ToListAsync();
+
         var linkedEvidence = await dbContext.EvidenceLinks
             .Where(x => x.EvidenceExcerpt.Document.TenantId == tenantId)
             .CountAsync();
+
+        var controlIds = controls.Select(x => x.Id).ToList();
+        var findingIds = findings.Select(x => x.Id).ToList();
+
+        var linkedControlEvidence = controlIds.Count == 0
+            ? 0
+            : await dbContext.EvidenceLinks
+                .Where(x => x.TargetType == "ControlInstance" && controlIds.Contains(x.TargetId) && x.EvidenceExcerpt.Document.TenantId == tenantId)
+                .CountAsync();
+
+        var linkedFindingEvidence = findingIds.Count == 0
+            ? 0
+            : await dbContext.EvidenceLinks
+                .Where(x => x.TargetType == "Finding" && findingIds.Contains(x.TargetId) && x.EvidenceExcerpt.Document.TenantId == tenantId)
+                .CountAsync();
+
+        var totalDocuments = await dbContext.Documents.CountAsync(x => x.TenantId == tenantId);
+        var freshDocuments = await dbContext.Documents.CountAsync(x => x.TenantId == tenantId && x.UploadedAt >= DateTimeOffset.UtcNow.AddDays(-180));
+
+        var controlCoveragePercent = controls.Count == 0 ? 0 : (int)Math.Round(100d * linkedControlEvidence / controls.Count);
+        var findingEvidencePercent = findings.Count == 0 ? 100 : (int)Math.Round(100d * linkedFindingEvidence / findings.Count);
+        var evidenceFreshnessScore = totalDocuments == 0 ? 40 : (int)Math.Round(100d * freshDocuments / totalDocuments);
+        var openObligations = actions.Count(x => x.Status is not ActionStatus.Done and not ActionStatus.AcceptedRisk);
+        var criticalDeficiencies = actions.Count(x => x.Priority.Equals("Critical", StringComparison.OrdinalIgnoreCase));
+        var complianceScore = latestAssessment is null ? 0 : ExtractTotalScore(latestAssessment.RiskScoresJson);
+
+        var evidenceIntegrityScore = (int)Math.Round(
+            evidenceFreshnessScore * 0.30 +
+            findingEvidencePercent * 0.35 +
+            controlCoveragePercent * 0.35);
+
+        var governanceSummary = new GovernanceSummary(
+            complianceScore,
+            openObligations,
+            criticalDeficiencies,
+            controlCoveragePercent,
+            evidenceIntegrityScore,
+            evidenceFreshnessScore,
+            findingEvidencePercent,
+            linkedEvidence);
+
+        var riskHeatRows = BuildRiskHeatRows(actions, findings);
 
         var exportPayload = new
         {
@@ -82,7 +129,8 @@ public static class ExportEndpoints
             },
             policyPackVersions = latestAssessment?.PolicyPackVersionRefs ?? [],
             signOffs = actions.Where(x => x.ApprovedAt.HasValue).Select(x => new { x.Id, x.Title, x.ApprovedBy, x.ApprovedAt }),
-            evidenceSummary = new { linkedEvidence },
+            governanceSummary,
+            riskHeatmapSnapshot = riskHeatRows,
             latestAssessment = latestAssessment is null
                 ? null
                 : new
@@ -127,7 +175,7 @@ public static class ExportEndpoints
         }
         else
         {
-            var lines = BuildPdfLines(request.ExportType, version, latestAssessment, actions, controls, linkedEvidence);
+            var lines = BuildPdfLines(request.ExportType, version, latestAssessment, actions, controls, governanceSummary, riskHeatRows);
             outputBytes = await exportService.GeneratePdfAsync($"Sylvaro {request.ExportType}", lines);
             outputContentType = "application/pdf";
             extension = "pdf";
@@ -214,33 +262,89 @@ public static class ExportEndpoints
         return Results.File(stream, string.IsNullOrWhiteSpace(contentType) ? artifact.MimeType : contentType, fileName);
     }
 
-    private static List<string> BuildPdfLines(string exportType, AiSystemVersion version, Assessment? latestAssessment, List<ActionItem> actions, List<ControlInstance> controls, int linkedEvidence)
+    private static List<string> BuildPdfLines(
+        string exportType,
+        AiSystemVersion version,
+        Assessment? latestAssessment,
+        List<ActionItem> actions,
+        List<ControlInstance> controls,
+        GovernanceSummary governance,
+        IReadOnlyList<RiskHeatRow> riskHeatRows)
     {
         var lines = new List<string>
         {
+            "# Governance Summary",
             $"Export Type: {exportType}",
             $"AI System: {version.AiSystem.Name}",
             $"Version: {version.VersionNumber}",
-            $"Generated: {DateTimeOffset.UtcNow:O}",
-            $"Evidence links: {linkedEvidence}",
-            ""
+            $"Generated: {DateTimeOffset.UtcNow:yyyy-MM-dd HH:mm:ss} UTC",
+            $"Compliance Score: {governance.ComplianceScore}",
+            $"Outstanding Obligations: {governance.OpenObligations}",
+            $"Critical Deficiencies: {governance.CriticalDeficiencies}",
+            $"Control Coverage: {governance.ControlCoveragePercent}%",
+            $"Evidence Integrity Score: {governance.EvidenceIntegrityScore}%",
+            "",
+            "## Evidence Posture",
+            $"- Evidence freshness: {governance.EvidenceFreshnessScore}%",
+            $"- Finding evidence linkage: {governance.FindingEvidencePercent}%",
+            $"- Linked evidence references: {governance.LinkedEvidenceCount}",
+            "",
+            "## Risk Heatmap Snapshot",
+            "| Severity | Findings | Actions |",
+            "| --- | ---: | ---: |"
         };
+
+        lines.AddRange(riskHeatRows.Select(row => $"| {row.Severity} | {row.FindingCount} | {row.ActionCount} |"));
 
         if (latestAssessment is not null)
         {
-            lines.Add("Latest assessment scores:");
-            lines.Add(latestAssessment.RiskScoresJson);
-            lines.Add("Policy pack versions: " + string.Join(", ", latestAssessment.PolicyPackVersionRefs));
             lines.Add("");
+            lines.Add("## Assessment Context");
+            lines.Add($"- Assessment run: {latestAssessment.RanAt:yyyy-MM-dd HH:mm:ss} UTC");
+            lines.Add("- Policy pack versions: " + string.Join(", ", latestAssessment.PolicyPackVersionRefs));
         }
 
-        lines.Add("Action plan:");
-        lines.AddRange(actions.Select(x => $"- [{x.Priority}] {x.Title} ({x.Status}) owner={x.OwnerRole} signoff={x.ApprovedAt?.ToString("u") ?? "pending"}"));
         lines.Add("");
-        lines.Add("Control instances:");
+        lines.Add("## Remediation Plan");
+        lines.AddRange(actions.Select(x => $"- [{x.Priority}] {x.Title} ({x.Status}) owner={x.OwnerRole} signoff={x.ApprovedAt?.ToString("u") ?? "pending"}"));
+
+        lines.Add("");
+        lines.Add("## Control Register");
         lines.AddRange(controls.Select(x => $"- {x.ControlKey}: {x.Status} signoff={x.ApprovedAt?.ToString("u") ?? "pending"}"));
 
         return lines;
+    }
+
+    private static IReadOnlyList<RiskHeatRow> BuildRiskHeatRows(List<ActionItem> actions, List<Finding> findings)
+    {
+        var severities = new[] { "Critical", "High", "Medium", "Low" };
+        return severities
+            .Select(severity => new RiskHeatRow(
+                severity,
+                findings.Count(f => f.Severity.ToString().Equals(severity, StringComparison.OrdinalIgnoreCase)),
+                actions.Count(a => a.Priority.Equals(severity, StringComparison.OrdinalIgnoreCase))))
+            .ToList();
+    }
+
+    private static int ExtractTotalScore(string riskScoresJson)
+    {
+        if (string.IsNullOrWhiteSpace(riskScoresJson))
+        {
+            return 0;
+        }
+
+        var marker = "\"totalScore\":";
+        var index = riskScoresJson.IndexOf(marker, StringComparison.OrdinalIgnoreCase);
+        if (index < 0)
+        {
+            return 0;
+        }
+
+        var start = index + marker.Length;
+        var end = riskScoresJson.IndexOfAny([',', '}'], start);
+        var span = end > start ? riskScoresJson[start..end] : riskScoresJson[start..];
+
+        return int.TryParse(span, out var score) ? score : 0;
     }
 
     private static async Task<WebhookPublishResult[]> SendToEnabledWebhooksAsync(
@@ -262,4 +366,16 @@ public static class ExportEndpoints
 
         return results.ToArray();
     }
+
+    private sealed record GovernanceSummary(
+        int ComplianceScore,
+        int OpenObligations,
+        int CriticalDeficiencies,
+        int ControlCoveragePercent,
+        int EvidenceIntegrityScore,
+        int EvidenceFreshnessScore,
+        int FindingEvidencePercent,
+        int LinkedEvidenceCount);
+
+    private sealed record RiskHeatRow(string Severity, int FindingCount, int ActionCount);
 }
