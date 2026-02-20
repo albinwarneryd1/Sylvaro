@@ -239,4 +239,4 @@ SYLVARO shows defensibility.
 
 ## License
 
-Private — Internal / Development use only.
+Private - Internal / Development use only.
